@@ -7,6 +7,7 @@ export enum Screen {
   Sell = 'SELL',
   ScanResult = 'SCAN_RESULT',
   GeneratedQR = 'GENERATED_QR',
+  InputCode = 'INPUT_CODE',
 }
 
 export enum ItemStatus {
@@ -26,4 +27,5 @@ export interface Item {
   ownerId?: string;
   status?: ItemStatus;
   location?: string; // Added for display purposes
+  shortId?: string;
 }

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Screen } from '../types';
 
@@ -7,15 +6,17 @@ interface SideMenuProps {
   onClose: () => void;
   onNavigate: (screen: Screen) => void;
   onScanRequest: () => void;
+  onInputCodeRequest: () => void;
   onPublicNavigate: (path: string) => void;
 }
 
-const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, onNavigate, onScanRequest, onPublicNavigate }) => {
+const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, onNavigate, onScanRequest, onInputCodeRequest, onPublicNavigate }) => {
   if (!isOpen) return null;
 
   const menuItems = [
     { label: 'Inicio', action: () => onNavigate(Screen.Home) },
     { label: 'Escanear QR', action: onScanRequest },
+    { label: 'Ingresar Código', action: onInputCodeRequest },
     { label: 'Generar QR', action: () => onNavigate(Screen.Generate) },
     { label: 'Mis Items', action: () => onNavigate(Screen.MyItems) },
     { label: 'Vender', action: () => onNavigate(Screen.Sell) },

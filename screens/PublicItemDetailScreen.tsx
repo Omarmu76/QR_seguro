@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Spinner from '../components/Spinner';
 import QRCode from '../components/QRCode';
@@ -61,6 +60,7 @@ const PublicItemDetailScreen: React.FC<PublicItemDetailScreenProps> = ({ itemId,
       if (!details || !details.ownerId || !details.qrId) return;
       setIsUpdating(true);
       try {
+          // Note: "public" is used as userId here to bypass ownership check for recovery
           await updateItemStatus(details.qrId, "public", ItemStatus.Recuperado);
           setDetails(prev => prev ? {...prev, status: ItemStatus.Recuperado} : null);
       } catch (e) {
@@ -92,7 +92,17 @@ const PublicItemDetailScreen: React.FC<PublicItemDetailScreenProps> = ({ itemId,
         ) : details ? (
           <>
             <div className="w-full max-w-[200px] mt-4">
-                <QRCode id={details.qrId || 'error'} />
+                {details.qrId && details.shortId ? (
+                     <QRCode 
+                        qrId={details.qrId} 
+                        shortId={details.shortId} 
+                        canvasId="public-item-detail-qr"
+                     />
+                ) : (
+                    <div className="w-full h-auto bg-gray-700 flex items-center justify-center p-8 rounded-lg">
+                        <p>Error al mostrar QR</p>
+                    </div>
+                )}
             </div>
 
             <p className="font-bold text-2xl my-3 tracking-widest">

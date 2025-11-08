@@ -6,16 +6,43 @@ import { Item, ItemStatus } from '../types';
 const itemsCollection = collection(db, "Items");
 
 /**
+ * Genera un ID corto legible.
+ * NOTA: Para producción, se debería verificar la unicidad en la DB.
+ */
+const generateShortId = (length: number = 6): string => {
+    const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789'; // Excluimos O, 0, I, L
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    // Formato XXX-XXX para legibilidad
+    if (length === 6) {
+        return `${result.substring(0, 3)}-${result.substring(3, 6)}`;
+    }
+    return result;
+};
+
+
+/**
  * Saves a new item to the Firestore "Items" collection with an owner ID.
  */
-export const saveItem = async (itemData: Omit<Item, 'qrId' | 'status' | 'ownerId'>, userId: string): Promise<Item> => {
+export const saveItem = async (itemData: Omit<Item, 'qrId' | 'status' | 'ownerId' | 'shortId'>, userId: string): Promise<Item> => {
     try {
+        // Generar el nuevo ID corto
+        const shortId = generateShortId(6);
+
         const newItem: Omit<Item, 'qrId'> = {
             ...itemData,
             status: ItemStatus.EnRegla,
             ownerId: userId,
+            shortId: shortId,
         };
         const docRef = await addDoc(itemsCollection, newItem);
+        
+        // Actualizar el documento con su propio qrId (que es el docRef.id)
+        // Esto es útil si alguna vez necesitamos el qrId DENTRO del documento
+        await updateDoc(docRef, { qrId: docRef.id });
+
         return {
             ...newItem,
             qrId: docRef.id,
@@ -46,6 +73,7 @@ export const getItemByQrId = async (qrId: string): Promise<{ item: Item, status:
                     identificador: data.identificador,
                     ownerId: data.ownerId,
                     status: data.status,
+                    shortId: data.shortId,
                 },
                 status: data.status || ItemStatus.EnRegla,
             };
@@ -56,6 +84,42 @@ export const getItemByQrId = async (qrId: string): Promise<{ item: Item, status:
         const message = (error instanceof Error) ? error.message : String(error);
         console.error("Error getting item from Firestore:", message);
         throw new Error("Could not retrieve item.");
+    }
+};
+
+/**
+ * NUEVA FUNCIÓN: Recupera un ítem usando el shortId (para búsqueda manual).
+ */
+export const getItemByShortId = async (shortId: string): Promise<{ item: Item, status: ItemStatus } | null> => {
+    try {
+        const q = query(itemsCollection, where("shortId", "==", shortId.toUpperCase()));
+        const querySnapshot = await getDocs(q);
+        
+        if (querySnapshot.empty) {
+            return null; // No se encontró
+        }
+        
+        const docSnap = querySnapshot.docs[0]; // Tomar el primer resultado
+        const data = docSnap.data() as Item;
+        
+        return {
+            item: {
+                qrId: docSnap.id,
+                tipo: data.tipo,
+                marca: data.marca,
+                modelo: data.modelo,
+                identificador: data.identificador,
+                ownerId: data.ownerId,
+                status: data.status,
+                shortId: data.shortId,
+            },
+            status: data.status || ItemStatus.EnRegla,
+        };
+
+    } catch (error) {
+        const message = (error instanceof Error) ? error.message : String(error);
+        console.error("Error getting item by shortId:", message);
+        throw new Error("Could not retrieve item by shortId.");
     }
 };
 

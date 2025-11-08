@@ -17,6 +17,7 @@ import PublicReportedListScreen from './screens/PublicReportedListScreen';
 import PublicItemDetailScreen from './screens/PublicItemDetailScreen';
 import SellScreen from './screens/SellScreen';
 import SideMenu from './components/SideMenu';
+import InputCodeScreen from './screens/InputCodeScreen';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -53,6 +54,7 @@ const App: React.FC = () => {
   const toggleMenu = () => setIsMenuOpen(prev => !prev);
 
   const handleScanRequest = useCallback(() => setModal(Screen.Scan), []);
+  const handleInputCodeRequest = useCallback(() => setModal(Screen.InputCode), []);
 
   const handleScanComplete = useCallback((result: { item: Item; status: ItemStatus }) => {
     setScanResult(result);
@@ -84,6 +86,11 @@ const App: React.FC = () => {
     handleScanRequest();
     setIsMenuOpen(false);
   };
+
+  const handleMenuInputCodeRequest = () => {
+    handleInputCodeRequest();
+    setIsMenuOpen(false);
+  };
   
   const handleMenuPublicNavigate = (newPath: string) => {
     navigate(newPath);
@@ -104,7 +111,7 @@ const App: React.FC = () => {
     
     switch (activeScreen) {
       case Screen.Home:
-        return <HomeScreen onScanRequest={handleScanRequest} onNavigate={handleAppNavigate} onPublicNavigate={navigate} onMenuClick={toggleMenu} />;
+        return <HomeScreen onScanRequest={handleScanRequest} onInputCodeRequest={handleInputCodeRequest} onNavigate={handleAppNavigate} onPublicNavigate={navigate} onMenuClick={toggleMenu} />;
       case Screen.Generate:
         return <GenerateScreen onGenerateComplete={handleGenerateComplete} user={user} onMenuClick={toggleMenu} />;
       case Screen.MyItems:
@@ -112,7 +119,7 @@ const App: React.FC = () => {
       case Screen.Sell:
         return <SellScreen user={user} onMenuClick={toggleMenu} />;
       default:
-        return <HomeScreen onScanRequest={handleScanRequest} onNavigate={handleAppNavigate} onPublicNavigate={navigate} onMenuClick={toggleMenu} />;
+        return <HomeScreen onScanRequest={handleScanRequest} onInputCodeRequest={handleInputCodeRequest} onNavigate={handleAppNavigate} onPublicNavigate={navigate} onMenuClick={toggleMenu} />;
     }
   };
 
@@ -121,6 +128,8 @@ const App: React.FC = () => {
     switch (modal) {
       case Screen.Scan:
         return <ScanScreen onScanComplete={handleScanComplete} onCancel={closeModal} />;
+      case Screen.InputCode:
+        return <InputCodeScreen onScanComplete={handleScanComplete} onCancel={closeModal} />;
       case Screen.ScanResult:
         return scanResult ? <ResultScreen result={scanResult} onClose={closeModal} /> : null;
       default:
@@ -161,6 +170,7 @@ const App: React.FC = () => {
             onClose={() => setIsMenuOpen(false)}
             onNavigate={handleMenuNavigate}
             onScanRequest={handleMenuScanRequest}
+            onInputCodeRequest={handleMenuInputCodeRequest}
             onPublicNavigate={handleMenuPublicNavigate}
         />
         <div className="flex-shrink-0 bg-[#1e2a47] p-2 flex justify-between items-center text-white border-b border-blue-900">
