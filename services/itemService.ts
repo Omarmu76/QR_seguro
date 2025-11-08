@@ -1,4 +1,3 @@
-
 import { collection, addDoc, getDoc, getDocs, query, where, doc, deleteDoc, updateDoc } from "firebase/firestore";
 import { db } from "../firebaseConfig";
 import { Item, ItemStatus } from '../types';
@@ -125,8 +124,14 @@ export const getItemByShortId = async (shortId: string): Promise<{ item: Item, s
 
 /**
  * Updates the status of an item after verifying ownership.
+ * AHORA TAMBIÉN GUARDA LA UBICACIÓN.
  */
-export const updateItemStatus = async (itemId: string, userId: string, newStatus: ItemStatus): Promise<void> => {
+export const updateItemStatus = async (
+    itemId: string, 
+    userId: string, 
+    newStatus: ItemStatus,
+    locationData: { lat: number, lng: number } | null = null
+): Promise<void> => {
     try {
         const docRef = doc(db, "Items", itemId);
         const docSnap = await getDoc(docRef);
@@ -136,8 +141,29 @@ export const updateItemStatus = async (itemId: string, userId: string, newStatus
         }
         const itemData = docSnap.data() as Item;
 
-        if (itemData.ownerId === userId || newStatus === ItemStatus.Recuperado) {
-            await updateDoc(docRef, { status: newStatus });
+        // "public" es un bypass usado por PublicItemDetailScreen
+        if (itemData.ownerId === userId || userId === "public") {
+            
+            let updateData: any = { status: newStatus };
+            
+            if (newStatus === ItemStatus.Denunciado) {
+                updateData.location = locationData;
+                updateData.locationTimestamp = Date.now();
+                updateData.recoveryLocation = null; // Limpiar datos de recuperación
+                updateData.recoveryTimestamp = null;
+            } else if (newStatus === ItemStatus.EnRegla || newStatus === ItemStatus.Vendido) {
+                updateData.location = null; // Limpiar datos de denuncia
+                updateData.locationTimestamp = null;
+                updateData.recoveryLocation = null;
+                updateData.recoveryTimestamp = null;
+            } else if (newStatus === ItemStatus.Recuperado) {
+                // No limpiamos 'location' para mantener el historial
+                updateData.recoveryLocation = locationData;
+                updateData.recoveryTimestamp = Date.now();
+            }
+            
+            await updateDoc(docRef, updateData);
+            
         } else {
              throw new Error("Permission denied.");
         }
@@ -145,6 +171,39 @@ export const updateItemStatus = async (itemId: string, userId: string, newStatus
     } catch (error) {
         const message = (error instanceof Error) ? error.message : String(error);
         console.error("Error updating item status:", message);
+        throw error;
+    }
+};
+
+
+// FIX: Added missing updateItemDetails function to resolve import error.
+/**
+ * Updates the details of an item after verifying ownership. Only allows changing tipo, marca, and modelo.
+ */
+export const updateItemDetails = async (itemId: string, userId: string, newData: { tipo: string; marca: string; modelo: string; }): Promise<void> => {
+    try {
+        const docRef = doc(db, "Items", itemId);
+        const docSnap = await getDoc(docRef);
+
+        if (!docSnap.exists()) {
+            throw new Error("Item not found.");
+        }
+        const itemData = docSnap.data() as Item;
+
+        if (itemData.ownerId !== userId) {
+            throw new Error("Permission denied.");
+        }
+        
+        // Only update allowed fields
+        await updateDoc(docRef, { 
+            tipo: newData.tipo,
+            marca: newData.marca,
+            modelo: newData.modelo,
+        });
+
+    } catch (error) {
+        const message = (error instanceof Error) ? error.message : String(error);
+        console.error("Error updating item details:", message);
         throw error;
     }
 };

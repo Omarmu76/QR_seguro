@@ -21,6 +21,12 @@ const HomeIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   </svg>
 );
 
+const MapIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m0 0v-8.25m0 8.25h.375c.621 0 1.125-.504 1.125-1.125V6.75m-1.5 8.25S8.84 15 8.25 15c-.6 0-1.125-.504-1.125-1.125V6.75m1.5 8.25v-8.25m0 0H6.75m0 0v8.25m0 0v0m0 0H9m1.5-8.25v8.25m0 0c.621 0 1.125-.504 1.125-1.125V6.75m0 0H12m4.5 0v8.25m0 0v0m0 0c-.6 0-1.125-.504-1.125-1.125V6.75m0 0h.375c.621 0 1.125.504 1.125 1.125V15m0 0S16.84 15 16.25 15c-.6 0-1.125-.504-1.125-1.125V6.75m1.5 8.25v-8.25" />
+  </svg>
+);
+
 const QrCodeIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.5h16.5M3.75 9h16.5m-16.5 5.25h16.5M3.75 19.5h16.5" />
@@ -33,12 +39,6 @@ const ListIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   </svg>
 );
 
-const RepeatIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 11.667 0l3.181-3.183m-11.667-11.667a8.25 8.25 0 0 1 11.667 0l3.181 3.183m-14.85-3.183L2.985 16.355" />
-  </svg>
-);
-
 interface BottomNavBarProps {
   activeScreen: Screen;
   setActiveScreen: (screen: Screen) => void;
@@ -48,8 +48,8 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeScreen, setActiveScre
   const navItems = [
     { screen: Screen.Home, label: 'Inicio', Icon: HomeIcon },
     { screen: Screen.Generate, label: 'Generar QR', Icon: QrCodeIcon },
+    { screen: Screen.Map, label: 'Mapa', Icon: MapIcon },
     { screen: Screen.MyItems, label: 'Mis Items', Icon: ListIcon },
-    { screen: Screen.Sell, label: 'Vender', Icon: RepeatIcon },
   ];
 
   return (

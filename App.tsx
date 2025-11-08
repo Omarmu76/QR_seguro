@@ -18,6 +18,8 @@ import PublicItemDetailScreen from './screens/PublicItemDetailScreen';
 import SellScreen from './screens/SellScreen';
 import SideMenu from './components/SideMenu';
 import InputCodeScreen from './screens/InputCodeScreen';
+import EditItemScreen from './screens/EditItemScreen';
+import MapScreen from './screens/MapScreen';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -28,6 +30,8 @@ const App: React.FC = () => {
   const [modal, setModal] = useState<Screen | null>(null);
   const [scanResult, setScanResult] = useState<{ item: Item; status: ItemStatus } | null>(null);
   const [generatedItem, setGeneratedItem] = useState<Item | null>(null);
+  const [itemToEdit, setItemToEdit] = useState<Item | null>(null);
+  const [myItemsKey, setMyItemsKey] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
   const [path, setPath] = useState(window.location.pathname);
@@ -55,6 +59,11 @@ const App: React.FC = () => {
 
   const handleScanRequest = useCallback(() => setModal(Screen.Scan), []);
   const handleInputCodeRequest = useCallback(() => setModal(Screen.InputCode), []);
+  
+  const handleEditRequest = useCallback((item: Item) => {
+    setItemToEdit(item);
+    setModal(Screen.EditItem);
+  }, []);
 
   const handleScanComplete = useCallback((result: { item: Item; status: ItemStatus }) => {
     setScanResult(result);
@@ -65,10 +74,17 @@ const App: React.FC = () => {
     setGeneratedItem(result);
     setActiveScreen(Screen.GeneratedQR);
   };
+  
+  const handleEditComplete = useCallback(() => {
+    setItemToEdit(null);
+    setModal(null);
+    setMyItemsKey(c => c + 1); // Force MyItemsScreen to re-render and fetch data
+  }, []);
 
   const closeModal = useCallback(() => {
     setModal(null);
     setScanResult(null);
+    setItemToEdit(null);
   }, []);
 
   const closeGeneratedQr = () => {
@@ -112,10 +128,12 @@ const App: React.FC = () => {
     switch (activeScreen) {
       case Screen.Home:
         return <HomeScreen onScanRequest={handleScanRequest} onInputCodeRequest={handleInputCodeRequest} onNavigate={handleAppNavigate} onPublicNavigate={navigate} onMenuClick={toggleMenu} />;
+      case Screen.Map:
+        return <MapScreen user={user} onMenuClick={toggleMenu} />;
       case Screen.Generate:
         return <GenerateScreen onGenerateComplete={handleGenerateComplete} user={user} onMenuClick={toggleMenu} />;
       case Screen.MyItems:
-        return <MyItemsScreen user={user} onMenuClick={toggleMenu} />;
+        return <MyItemsScreen key={myItemsKey} user={user} onMenuClick={toggleMenu} onEditRequest={handleEditRequest} />;
       case Screen.Sell:
         return <SellScreen user={user} onMenuClick={toggleMenu} />;
       default:
@@ -132,6 +150,8 @@ const App: React.FC = () => {
         return <InputCodeScreen onScanComplete={handleScanComplete} onCancel={closeModal} />;
       case Screen.ScanResult:
         return scanResult ? <ResultScreen result={scanResult} onClose={closeModal} /> : null;
+      case Screen.EditItem:
+        return itemToEdit && user ? <EditItemScreen item={itemToEdit} user={user} onEditComplete={handleEditComplete} onCancel={closeModal} /> : null;
       default:
         return null;
     }

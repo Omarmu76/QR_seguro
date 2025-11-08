@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User } from 'firebase/auth';
 import Header from '../components/Header';
@@ -7,10 +6,11 @@ import { getAllUserItems, deleteItem, updateItemStatus } from '../services/itemS
 import Spinner from '../components/Spinner';
 import ConfirmationModal from '../components/ConfirmationModal';
 
-interface MyItemsScreenProps {
-  user: User;
-  onMenuClick: () => void;
-}
+const PencilIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+  </svg>
+);
 
 const TrashIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -30,7 +30,36 @@ const ShieldCheckIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   </svg>
 );
 
-const ItemCard: React.FC<{ item: Item; onUnreport: () => void; onReport: () => void; onDelete: () => void; }> = ({ item, onUnreport, onReport, onDelete }) => {
+// --- Helper de Geolocalización ---
+const getCurrentLocation = (): Promise<{ lat: number, lng: number }> => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocalización no es soportada por este navegador."));
+      return;
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      (err) => {
+        if (err.code === 1) { // 1: PERMISSION_DENIED
+            reject(new Error("Permiso de GPS denegado. Habilítelo para denunciar."));
+        } else {
+            reject(new Error("No se pudo obtener la ubicación."));
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  });
+};
+// --- Fin Helper ---
+
+
+const ItemCard: React.FC<{ item: Item; onUnreport: () => void; onReport: () => void; onDelete: () => void; onEdit: () => void; }> = ({ item, onUnreport, onReport, onDelete, onEdit }) => {
   const isReported = item.status === ItemStatus.Denunciado;
   const isSold = item.status === ItemStatus.Vendido;
   let borderColor = 'border-green-500';
@@ -46,7 +75,15 @@ const ItemCard: React.FC<{ item: Item; onUnreport: () => void; onReport: () => v
           ESTADO: {item.status?.replace('_', ' ') || 'EN REGLA'}
         </p>
       </div>
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-1">
+          <button 
+            onClick={onEdit}
+            disabled={isSold}
+            className="p-2 rounded-full text-gray-400 hover:bg-blue-900/50 hover:text-blue-400 transition-colors disabled:opacity-50"
+            aria-label="Editar item"
+          >
+              <PencilIcon className="h-6 w-6"/>
+          </button>
           {isReported ? (
                <button 
                   onClick={onUnreport}
@@ -77,11 +114,18 @@ const ItemCard: React.FC<{ item: Item; onUnreport: () => void; onReport: () => v
   );
 };
 
-const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick }) => {
+interface MyItemsScreenProps {
+  user: User;
+  onMenuClick: () => void;
+  onEditRequest: (item: Item) => void;
+}
+
+const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEditRequest }) => {
   const [items, setItems] = useState<Item[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<Item | null>(null);
+  const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
 
   const fetchItems = useCallback(async () => {
     if (!user) return;
@@ -119,21 +163,50 @@ const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick }) => {
   
   const handleReportItem = async (item: Item) => {
       if (!item.qrId) return;
+      setLoadingItemId(item.qrId);
+      setError(null);
+      
+      let location = null;
       try {
-        await updateItemStatus(item.qrId, user.uid, ItemStatus.Denunciado);
-        setItems(prevItems => prevItems.map(i => i.qrId === item.qrId ? { ...i, status: ItemStatus.Denunciado } : i));
+        location = await getCurrentLocation();
+      } catch (err: any) {
+        setError(err.message || "Error de GPS. No se pudo denunciar.");
+        setLoadingItemId(null);
+        return;
+      }
+
+      try {
+        await updateItemStatus(item.qrId, user.uid, ItemStatus.Denunciado, location);
+        setItems(prevItems => prevItems.map(i => i.qrId === item.qrId ? { 
+            ...i, 
+            status: ItemStatus.Denunciado,
+            location: location,
+            locationTimestamp: Date.now()
+        } : i));
       } catch (err) {
           setError("Error al denunciar el item. Intente de nuevo.");
+      } finally {
+          setLoadingItemId(null);
       }
   };
 
   const handleUnreportItem = async (item: Item) => {
       if (!item.qrId) return;
+      setLoadingItemId(item.qrId);
+      setError(null);
+      
       try {
-        await updateItemStatus(item.qrId, user.uid, ItemStatus.EnRegla);
-        setItems(prevItems => prevItems.map(i => i.qrId === item.qrId ? { ...i, status: ItemStatus.EnRegla } : i));
+        await updateItemStatus(item.qrId, user.uid, ItemStatus.EnRegla, null);
+        setItems(prevItems => prevItems.map(i => i.qrId === item.qrId ? { 
+            ...i, 
+            status: ItemStatus.EnRegla, 
+            location: null, 
+            locationTimestamp: null 
+        } : i));
       } catch (err) {
           setError("Error al quitar denuncia del item. Intente de nuevo.");
+      } finally {
+          setLoadingItemId(null);
       }
   };
 
@@ -149,13 +222,21 @@ const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick }) => {
         ) : items.length > 0 ? (
           <div className="space-y-3">
             {items.map((item) => (
-              <ItemCard 
-                key={item.qrId} 
-                item={item}
-                onReport={() => handleReportItem(item)}
-                onUnreport={() => handleUnreportItem(item)}
-                onDelete={() => handleDeleteRequest(item)}
-              />
+              <React.Fragment key={item.qrId}>
+                {loadingItemId === item.qrId ? (
+                  <div className="p-4 rounded-lg bg-gray-800/80 flex items-center justify-center h-[92px]">
+                    <Spinner />
+                  </div>
+                ) : (
+                  <ItemCard 
+                    item={item}
+                    onReport={() => handleReportItem(item)}
+                    onUnreport={() => handleUnreportItem(item)}
+                    onDelete={() => handleDeleteRequest(item)}
+                    onEdit={() => onEditRequest(item)}
+                  />
+                )}
+              </React.Fragment>
             ))}
           </div>
         ) : (

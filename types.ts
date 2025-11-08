@@ -8,6 +8,8 @@ export enum Screen {
   ScanResult = 'SCAN_RESULT',
   GeneratedQR = 'GENERATED_QR',
   InputCode = 'INPUT_CODE',
+  EditItem = 'EDIT_ITEM',
+  Map = 'MAP',
 }
 
 export enum ItemStatus {
@@ -26,6 +28,12 @@ export interface Item {
   qrId?: string;
   ownerId?: string;
   status?: ItemStatus;
-  location?: string; // Added for display purposes
   shortId?: string;
+  
+  // Geolocation fields
+  location?: { lat: number, lng: number } | null; // Where it was reported
+  locationTimestamp?: number | null; // When it was reported
+  
+  recoveryLocation?: { lat: number, lng: number } | null; // Where it was recovered
+  recoveryTimestamp?: number | null; // When it was recovered
 }

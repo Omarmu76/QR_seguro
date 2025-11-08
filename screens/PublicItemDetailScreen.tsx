@@ -16,6 +16,29 @@ interface FullItemDetails extends Item {
   };
 }
 
+// <<< Reutilizamos el helper de Geolocalización >>>
+const getCurrentLocation = (): Promise<{ lat: number, lng: number }> => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocalización no es soportada."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      (err) => {
+        reject(new Error("No se pudo obtener la ubicación."));
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  });
+};
+// --- Fin Helper ---
+
 const PublicItemDetailScreen: React.FC<PublicItemDetailScreenProps> = ({ itemId, onNavigate }) => {
   const [details, setDetails] = useState<FullItemDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -59,10 +82,25 @@ const PublicItemDetailScreen: React.FC<PublicItemDetailScreenProps> = ({ itemId,
   const handleRecoverItem = async () => {
       if (!details || !details.ownerId || !details.qrId) return;
       setIsUpdating(true);
+      setError('');
+      
+      let location = null;
       try {
-          // Note: "public" is used as userId here to bypass ownership check for recovery
-          await updateItemStatus(details.qrId, "public", ItemStatus.Recuperado);
-          setDetails(prev => prev ? {...prev, status: ItemStatus.Recuperado} : null);
+        location = await getCurrentLocation();
+      } catch (err) {
+          // No es crítico si falla el GPS, pero avisamos
+          console.warn("No se pudo obtener ubicación de recuperación.");
+      }
+      
+      try {
+          // "public" es el bypass de ID de usuario
+          await updateItemStatus(details.qrId, "public", ItemStatus.Recuperado, location);
+          setDetails(prev => prev ? {
+              ...prev, 
+              status: ItemStatus.Recuperado,
+              recoveryLocation: location,
+              recoveryTimestamp: Date.now()
+          } : null);
       } catch (e) {
           setError("Error al actualizar el estado.");
       } finally {
@@ -70,6 +108,11 @@ const PublicItemDetailScreen: React.FC<PublicItemDetailScreenProps> = ({ itemId,
       }
   };
 
+  // --- Helper para mostrar fechas ---
+  const formatDate = (timestamp: number | null | undefined) => {
+      if (!timestamp) return 'N/A';
+      return new Date(timestamp).toLocaleString('es-AR');
+  };
 
   return (
     <div className="flex flex-col h-full bg-red-600 text-white">
@@ -109,21 +152,42 @@ const PublicItemDetailScreen: React.FC<PublicItemDetailScreenProps> = ({ itemId,
                 {details.status === ItemStatus.Recuperado ? 'RECUPERADO' : 'DENUNCIADO'}
             </p>
 
-            <div className="w-full bg-yellow-300 text-black p-4 rounded-lg border-4 border-black/50 space-y-2">
+            <div className="w-full bg-yellow-300 text-black p-4 rounded-lg border-4 border-black/50 space-y-2 mb-4">
                 <p className="font-bold text-lg">Contacto: {details.ownerContact.nombreCompleto}</p>
                 <p>Email: {details.ownerContact.email}</p>
                 <p className="font-semibold">{details.tipo.toUpperCase()}</p>
                 <p className="text-sm">ID: {details.identificador}</p>
                 <p className="text-sm">MARCA: {details.marca} / {details.modelo}</p>
+                <p className="font-bold text-sm pt-2 border-t border-black/20">
+                    DENUNCIADO: {formatDate(details.locationTimestamp)}
+                </p>
+                {details.status === ItemStatus.Recuperado && (
+                   <p className="font-bold text-sm text-blue-800">
+                       RECUPERADO: {formatDate(details.recoveryTimestamp)}
+                   </p>
+                )}
             </div>
             
-            <div className="my-4 w-full h-24 bg-gray-500 rounded-lg flex items-center justify-center opacity-50">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span className='ml-2'>Ubicación (placeholder)</span>
-            </div>
+            {/* --- MAPA ACTUALIZADO --- */}
+            {details.location ? (
+                <a 
+                    href={`https://www.google.com/maps?q=${details.location.lat},${details.location.lng}`}
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="my-4 w-full h-24 bg-blue-700 rounded-lg flex items-center justify-center text-white font-bold text-lg hover:bg-blue-800 transition-colors"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span className='ml-2'>VER UBICACIÓN DE DENUNCIA</span>
+                </a>
+            ) : (
+                <div className="my-4 w-full h-24 bg-gray-500 rounded-lg flex items-center justify-center opacity-50">
+                   <span className='ml-2'>Ubicación no reportada</span>
+                </div>
+            )}
+            {/* --- FIN MAPA --- */}
 
             <button
                 onClick={handleRecoverItem}

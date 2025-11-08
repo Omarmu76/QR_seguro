@@ -102,7 +102,7 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
       <ConfirmationModal
         isOpen={isConfirmModalOpen}
         title="Confirmar Datos"
-        message="¿Estás seguro de que los datos son correctos? No podrás modificarlos luego."
+        message="¿Estás seguro de que los datos son correctos? Podrás editarlos más tarde (excepto Patente/Serie)."
         onConfirm={handleConfirmGenerate}
         onCancel={handleCancelGenerate}
         confirmText="Sí, generar"
