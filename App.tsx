@@ -1,8 +1,10 @@
+// Archivo: App.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { User } from 'firebase/auth';
 import { onAuthStateChange, signOutUser } from './services/authService';
-import { Screen, Item, ItemStatus } from './types';
+import { Screen, Item, ItemStatus } from './types'; // Tipos estándar
 
+// Importaciones de Pantallas
 import HomeScreen from './screens/HomeScreen';
 import GenerateScreen from './screens/GenerateScreen';
 import MyItemsScreen from './screens/MyItemsScreen';
@@ -11,17 +13,19 @@ import ResultScreen from './screens/ResultScreen';
 import GeneratedQrScreen from './screens/GeneratedQrScreen';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
-import BottomNavBar from './components/BottomNavBar';
-import Spinner from './components/Spinner';
 import PublicReportedListScreen from './screens/PublicReportedListScreen';
 import PublicItemDetailScreen from './screens/PublicItemDetailScreen';
-import TransfersScreen from './screens/TransfersScreen';
-import SideMenu from './components/SideMenu';
+import TransfersScreen from './screens/TransfersScreen'; // Pantalla del Vendedor
 import InputCodeScreen from './screens/InputCodeScreen';
 import EditItemScreen from './screens/EditItemScreen';
 import MapScreen from './screens/MapScreen';
 import ItemDetailScreen from './screens/ItemDetailScreen';
-import RequestTransferScreen from './screens/RequestTransferScreen';
+import RequestTransferScreen from './screens/RequestTransferScreen'; // Pantalla del Comprador
+
+// Importaciones de Componentes
+import BottomNavBar from './components/BottomNavBar';
+import Spinner from './components/Spinner';
+import SideMenu from './components/SideMenu';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -30,13 +34,17 @@ const App: React.FC = () => {
   
   const [activeScreen, setActiveScreen] = useState<Screen>(Screen.Home);
   const [modal, setModal] = useState<Screen | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
+  // Estados para los modales
   const [scanResult, setScanResult] = useState<{ item: Item; status: ItemStatus } | null>(null);
   const [generatedItem, setGeneratedItem] = useState<Item | null>(null);
   const [itemToEdit, setItemToEdit] = useState<Item | null>(null);
   const [itemToView, setItemToView] = useState<Item | null>(null);
-  const [myItemsKey, setMyItemsKey] = useState(0);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  // Estado para el item que se va a transferir (el que ve el comprador)
+  const [itemToTransfer, setItemToTransfer] = useState<Item | null>(null); // <<< ESTADO CORREGIDO
   
+  const [myItemsKey, setMyItemsKey] = useState(0);
   const [path, setPath] = useState(window.location.pathname);
 
   useEffect(() => {
@@ -54,12 +62,13 @@ const App: React.FC = () => {
   }, []);
 
   const navigate = (newPath: string) => {
-    //window.history.pushState({}, '', newPath);
+    // window.history.pushState({}, '', newPath); // Comentado por conflicto con iframe
     setPath(newPath);
   };
 
   const toggleMenu = () => setIsMenuOpen(prev => !prev);
 
+  // --- Handlers para abrir modales ---
   const handleScanRequest = useCallback(() => setModal(Screen.Scan), []);
   const handleInputCodeRequest = useCallback(() => setModal(Screen.InputCode), []);
   
@@ -73,20 +82,25 @@ const App: React.FC = () => {
     setModal(Screen.ItemDetail);
   }, []);
 
+  // <<< LÓGICA DE INTERCEPCIÓN (CORREGIDA) >>>
   const handleScanComplete = useCallback((result: { item: Item; status: ItemStatus }) => {
-    const isOwner = user && result.item.ownerId === user.uid;
+    if (!user) return; // Si no hay usuario, no hacer nada (no debería pasar)
+
+    const isOwner = result.item.ownerId === user.uid;
     const status = result.status;
     
-    // La nueva lógica de "compra"
+    // CASO 1: El item está 'En Regla' Y NO es mío.
     if (!isOwner && status === ItemStatus.EnRegla) {
-      setScanResult(result);
-      setModal(Screen.REQUEST_TRANSFER);
+      // ¡Es un intento de COMPRA!
+      setItemToTransfer(result.item); // <<< Guardamos el item para el modal de transferencia
+      setModal(Screen.REQUEST_TRANSFER); // <<< Abrimos el modal de solicitud
     } else {
-      // El resto de los casos (es mío, está denunciado, vendido, etc.)
+      // CASO 2: Es mío, o está Denunciado, Vendido, etc.
+      // Mostramos la pantalla de resultado normal.
       setScanResult(result);
       setModal(Screen.ScanResult);
     }
-  }, [user]);
+  }, [user]); // <<< Depende del 'user' para saber si es el dueño
 
   const handleGenerateComplete = (result: Item) => {
     setGeneratedItem(result);
@@ -96,7 +110,7 @@ const App: React.FC = () => {
   const handleEditComplete = useCallback(() => {
     setItemToEdit(null);
     setModal(null);
-    setMyItemsKey(c => c + 1); // Force MyItemsScreen to re-render and fetch data
+    setMyItemsKey(c => c + 1); // Refresca 'Mis Items'
   }, []);
 
   const closeModal = useCallback(() => {
@@ -104,6 +118,7 @@ const App: React.FC = () => {
     setScanResult(null);
     setItemToEdit(null);
     setItemToView(null);
+    setItemToTransfer(null); // <<< Limpiamos el item a transferir
   }, []);
 
   const closeGeneratedQr = () => {
@@ -111,32 +126,30 @@ const App: React.FC = () => {
     setActiveScreen(Screen.Home);
   };
 
+  // ... (Handlers del Menú: handleMenuNavigate, handleMenuScanRequest, etc. no cambian) ...
   const handleMenuNavigate = (screen: Screen) => {
     setPath('/');
     setActiveScreen(screen);
     setIsMenuOpen(false);
   };
-  
   const handleMenuScanRequest = () => {
     handleScanRequest();
     setIsMenuOpen(false);
   };
-
   const handleMenuInputCodeRequest = () => {
     handleInputCodeRequest();
     setIsMenuOpen(false);
   };
-  
   const handleMenuPublicNavigate = (newPath: string) => {
     navigate(newPath);
     setIsMenuOpen(false);
   };
-
   const handleAppNavigate = (screen: Screen) => {
      setPath('/');
      setActiveScreen(screen);
   };
 
+  // --- Renders ---
   const renderActiveScreen = () => {
     if (!user) return null;
 
@@ -153,7 +166,7 @@ const App: React.FC = () => {
         return <GenerateScreen onGenerateComplete={handleGenerateComplete} user={user} onMenuClick={toggleMenu} />;
       case Screen.MyItems:
         return <MyItemsScreen key={myItemsKey} user={user} onMenuClick={toggleMenu} onEditRequest={handleEditRequest} onViewRequest={handleViewRequest} />;
-      case Screen.TRANSFERS:
+      case Screen.TRANSFERS: // <<< (Ya actualizado en el paso anterior)
         return <TransfersScreen user={user} onMenuClick={toggleMenu} />;
       default:
         return <HomeScreen onScanRequest={handleScanRequest} onInputCodeRequest={handleInputCodeRequest} onNavigate={handleAppNavigate} onPublicNavigate={navigate} onMenuClick={toggleMenu} />;
@@ -169,8 +182,19 @@ const App: React.FC = () => {
         return <InputCodeScreen onScanComplete={handleScanComplete} onCancel={closeModal} />;
       case Screen.ScanResult:
         return scanResult ? <ResultScreen result={scanResult} onClose={closeModal} /> : null;
+      
+      // <<< RENDER DEL MODAL DE TRANSFERENCIA (CORREGIDO) >>>
       case Screen.REQUEST_TRANSFER:
-        return scanResult && user ? <RequestTransferScreen item={scanResult.item} user={user} onCancel={closeModal} onRequestSent={closeModal} /> : null;
+        // Usamos 'itemToTransfer' en lugar de 'scanResult'
+        return itemToTransfer && user ? ( 
+          <RequestTransferScreen 
+            item={itemToTransfer} 
+            user={user} 
+            onCancel={closeModal} // Prop 'onCancel'
+            onRequestSent={closeModal} // Prop 'onRequestSent'
+          />
+        ) : null;
+        
       case Screen.EditItem:
         return itemToEdit && user ? <EditItemScreen item={itemToEdit} user={user} onEditComplete={handleEditComplete} onCancel={closeModal} /> : null;
       case Screen.ItemDetail:
@@ -181,6 +205,7 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
+    // ... (El resto de la función no cambia)
     if (path.startsWith('/denuncias')) {
       const parts = path.split('/');
       const itemId = parts[2];
@@ -189,7 +214,6 @@ const App: React.FC = () => {
       }
       return <PublicReportedListScreen onNavigate={navigate} />;
     }
-    
     if (authLoading) {
       return (
         <div className="flex items-center justify-center h-full">
@@ -197,7 +221,6 @@ const App: React.FC = () => {
         </div>
       );
     }
-
     if (!user) {
       return authScreen === 'login' ? (
         <LoginScreen onSwitchToRegister={() => setAuthScreen('register')} />
@@ -205,7 +228,6 @@ const App: React.FC = () => {
         <RegisterScreen onSwitchToLogin={() => setAuthScreen('login')} />
       );
     }
-
     return (
       <>
         <SideMenu 

@@ -1,3 +1,4 @@
+// Archivo: types.ts
 
 export enum Screen {
   Home = 'HOME',
@@ -11,7 +12,7 @@ export enum Screen {
   EditItem = 'EDIT_ITEM',
   Map = 'MAP',
   ItemDetail = 'ITEM_DETAIL',
-  REQUEST_TRANSFER = 'REQUEST_TRANSFER', // Para el modal de solicitud de compra
+  REQUEST_TRANSFER = 'REQUEST_TRANSFER',
 }
 
 export enum ItemStatus {
@@ -22,12 +23,14 @@ export enum ItemStatus {
   DEVUELTO = 'DEVUELTO',
 }
 
+// <<< AÑADIMOS EL ENUM PARA EL ESTADO DE LA TRANSFERENCIA >>>
 export enum TransferStatus {
   Pending = 'PENDIENTE',
   Approved = 'APROBADO',
   Rejected = 'RECHAZADO',
 }
 
+// <<< ACTUALIZAMOS LA INTERFAZ DE TRANSFERENCIA >>>
 export interface TransferRequest {
   id?: string; // Firestore doc ID
   itemId: string;
@@ -48,17 +51,13 @@ export interface Item {
   tipo: string;
   marca: string;
   modelo: string;
-  identificador: string; // Patente or Serial
-  // Optional properties that are present on items retrieved from Firestore
+  identificador: string; 
   qrId?: string;
   ownerId?: string;
   status?: ItemStatus;
   shortId?: string;
-  
-  // Geolocation fields
-  location?: { lat: number, lng: number } | null; // Where it was reported
-  locationTimestamp?: number | null; // When it was reported
-  
-  recoveryLocation?: { lat: number, lng: number } | null; // Where it was recovered
-  recoveryTimestamp?: number | null; // When it was recovered
+  location?: { lat: number, lng: number } | null; 
+  locationTimestamp?: number | null; 
+  recoveryLocation?: { lat: number, lng: number } | null; 
+  recoveryTimestamp?: number | null; 
 }

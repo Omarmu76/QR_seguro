@@ -1,4 +1,4 @@
-import { collection, addDoc, getDoc, getDocs, query, where, doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { collection, addDoc, getDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, serverTimestamp, orderBy, Timestamp, limit } from "firebase/firestore";
 import { User } from 'firebase/auth';
 import { db } from "../firebaseConfig";
 import { Item, ItemStatus, TransferRequest, TransferStatus } from '../types';
@@ -306,17 +306,17 @@ export const getUserById = async (userId: string): Promise<{email: string, nombr
 };
 
 /**
- * Creates a new transfer request in Firestore.
+ * (ACTUALIZADA) Creates a new transfer request in Firestore and returns it.
  */
-export const requestItemTransfer = async (item: Item, buyer: User): Promise<void> => {
+export const createTransferRequest = async (item: Item, buyer: User): Promise<TransferRequest> => {
     if (!item.qrId || !item.ownerId) {
         throw new Error("Datos del item inválidos para la transferencia.");
     }
-    
+
     // 1. Check for existing pending transfers for this item to avoid duplicates
     const transfersRef = collection(db, "Transfers");
-    const q = query(transfersRef, 
-        where("itemId", "==", item.qrId), 
+    const q = query(transfersRef,
+        where("itemId", "==", item.qrId),
         where("status", "==", TransferStatus.Pending)
     );
     const existingTransfers = await getDocs(q);
@@ -325,7 +325,7 @@ export const requestItemTransfer = async (item: Item, buyer: User): Promise<void
     }
 
     // 2. Create the new transfer request object
-    const newTransfer: Omit<TransferRequest, 'id'> = {
+    const newTransferData: Omit<TransferRequest, 'id' | 'createdAt'> = {
         itemId: item.qrId,
         itemDetails: {
             tipo: item.tipo,
@@ -337,15 +337,134 @@ export const requestItemTransfer = async (item: Item, buyer: User): Promise<void
         buyerId: buyer.uid,
         buyerEmail: buyer.email,
         status: TransferStatus.Pending,
-        createdAt: Date.now(),
     };
 
     // 3. Save to Firestore
     try {
-        await addDoc(collection(db, "Transfers"), newTransfer);
+        const docRef = await addDoc(collection(db, "Transfers"), {
+            ...newTransferData,
+            createdAt: serverTimestamp(),
+        });
+        
+        // 4. Return the full TransferRequest object
+        return {
+            ...newTransferData,
+            id: docRef.id,
+            createdAt: Date.now(), // Return an estimated timestamp for immediate UI update
+        };
     } catch (error) {
         const message = (error instanceof Error) ? error.message : String(error);
         console.error("Error creating transfer request:", message);
         throw new Error("No se pudo crear la solicitud de transferencia.");
+    }
+};
+
+/**
+ * (NUEVA) Obtiene la solicitud de transferencia más reciente para un item específico por parte de un comprador.
+ */
+export const getTransferRequestByItem = async (itemId: string, buyerId: string): Promise<TransferRequest | null> => {
+  try {
+    const transfersRef = collection(db, "Transfers");
+    const q = query(
+      transfersRef,
+      where("itemId", "==", itemId),
+      where("buyerId", "==", buyerId),
+      orderBy("createdAt", "desc"),
+      limit(1)
+    );
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) {
+      return null;
+    }
+    const doc = querySnapshot.docs[0];
+    const data = doc.data();
+    const createdAtTimestamp = data.createdAt as Timestamp;
+    return {
+        id: doc.id,
+        ...data,
+        createdAt: createdAtTimestamp ? createdAtTimestamp.toMillis() : Date.now(),
+    } as TransferRequest;
+  } catch (error) {
+    const message = (error instanceof Error) ? error.message : String(error);
+    console.error("Error fetching transfer request by item:", message);
+    throw new Error("Could not fetch transfer request.");
+  }
+};
+
+
+/**
+ * Fetches pending transfer requests for a seller.
+ */
+export const getPendingTransfers = async (sellerId: string): Promise<TransferRequest[]> => {
+    try {
+        const transfersRef = collection(db, "Transfers");
+        const q = query(transfersRef, 
+            where("sellerId", "==", sellerId),
+            where("status", "==", TransferStatus.Pending),
+            orderBy("createdAt", "desc") // Server-side sorting
+        );
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            const createdAtTimestamp = data.createdAt as Timestamp;
+            return {
+                id: doc.id,
+                ...data,
+                // Convert Firestore Timestamp to number for client-side use
+                createdAt: createdAtTimestamp ? createdAtTimestamp.toMillis() : Date.now(),
+            } as TransferRequest;
+        });
+    } catch (error) {
+        const message = (error instanceof Error) ? error.message : String(error);
+        console.error("Error fetching pending transfers:", message);
+        throw new Error("Could not fetch pending transfers.");
+    }
+};
+
+/**
+ * (NUEVA-CORREGIDA) Aprueba una transferencia.
+ * Transfiere la propiedad y genera un NUEVO shortId para el comprador,
+ * invalidando el código alfanumérico del vendedor.
+ */
+export const approveTransfer = async (transferId: string, itemId: string, buyerId: string) => {
+  const batch = writeBatch(db); // Usamos un batch para que todo falle o todo funcione
+
+  // 1. Referencia al documento de Transferencia
+  const transferRef = doc(db, "Transfers", transferId);
+  batch.update(transferRef, { status: TransferStatus.Approved });
+
+  // 2. Referencia al Item
+  const itemRef = doc(db, "Items", itemId);
+  
+  // Generamos un nuevo código alfanumérico para el comprador.
+  // El qrId (document ID) NO cambia.
+  const newShortId = generateShortId(6);
+
+  batch.update(itemRef, {
+    ownerId: buyerId,           // Transfiere la propiedad
+    status: ItemStatus.EnRegla, // Lo resetea a 'En Regla' para el nuevo dueño
+    shortId: newShortId,        // Asigna nuevo código
+    // Limpiamos los campos de denuncia/recuperación
+    location: null,
+    locationTimestamp: null,
+    recoveryLocation: null,
+    recoveryTimestamp: null,
+  });
+
+  // 3. Ejecuta la operación
+  await batch.commit();
+};
+
+/**
+ * Rejects a transfer request.
+ */
+export const rejectTransfer = async (transferId: string): Promise<void> => {
+    try {
+        const transferRef = doc(db, "Transfers", transferId);
+        await updateDoc(transferRef, { status: TransferStatus.Rejected });
+    } catch (error) {
+        const message = (error instanceof Error) ? error.message : String(error);
+        console.error("Error rejecting transfer:", message);
+        throw new Error("Could not reject transfer.");
     }
 };
