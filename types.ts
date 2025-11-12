@@ -4,12 +4,14 @@ export enum Screen {
   Scan = 'SCAN',
   Generate = 'GENERATE',
   MyItems = 'MY_ITEMS',
-  Sell = 'SELL',
+  TRANSFERS = 'TRANSFERS',
   ScanResult = 'SCAN_RESULT',
   GeneratedQR = 'GENERATED_QR',
   InputCode = 'INPUT_CODE',
   EditItem = 'EDIT_ITEM',
   Map = 'MAP',
+  ItemDetail = 'ITEM_DETAIL',
+  REQUEST_TRANSFER = 'REQUEST_TRANSFER', // Para el modal de solicitud de compra
 }
 
 export enum ItemStatus {
@@ -17,6 +19,29 @@ export enum ItemStatus {
   Denunciado = 'DENUNCIADO',
   Vendido = 'VENDIDO',
   Recuperado = 'RECUPERADO',
+  DEVUELTO = 'DEVUELTO',
+}
+
+export enum TransferStatus {
+  Pending = 'PENDIENTE',
+  Approved = 'APROBADO',
+  Rejected = 'RECHAZADO',
+}
+
+export interface TransferRequest {
+  id?: string; // Firestore doc ID
+  itemId: string;
+  itemDetails: { // Guardamos una copia de los datos para mostrar
+    tipo: string;
+    marca: string;
+    modelo: string;
+    identificador: string;
+  };
+  sellerId: string;
+  buyerId: string;
+  buyerEmail: string | null; // El email del que pide la transferencia
+  status: TransferStatus;
+  createdAt: number; // Timestamp
 }
 
 export interface Item {

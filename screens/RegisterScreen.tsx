@@ -37,8 +37,16 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
     setIsLoading(true);
     try {
       await signInWithGoogle();
-    } catch (err) {
-      setError('No se pudo iniciar sesión con Google.');
+    } catch (err: any) {
+      console.error("Google Login Error:", err); // Para ver el error completo en la consola
+      
+      if (err.code === 'auth/popup-closed-by-user') {
+        setError('Inicio de sesión cancelado.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+          setError('El dominio de esta app no está autorizado. Revisa Firebase.');
+      } else {
+        setError('No se pudo iniciar sesión con Google.');
+      }
     } finally {
       setIsLoading(false);
     }

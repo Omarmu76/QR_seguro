@@ -15,11 +15,13 @@ import BottomNavBar from './components/BottomNavBar';
 import Spinner from './components/Spinner';
 import PublicReportedListScreen from './screens/PublicReportedListScreen';
 import PublicItemDetailScreen from './screens/PublicItemDetailScreen';
-import SellScreen from './screens/SellScreen';
+import TransfersScreen from './screens/TransfersScreen';
 import SideMenu from './components/SideMenu';
 import InputCodeScreen from './screens/InputCodeScreen';
 import EditItemScreen from './screens/EditItemScreen';
 import MapScreen from './screens/MapScreen';
+import ItemDetailScreen from './screens/ItemDetailScreen';
+import RequestTransferScreen from './screens/RequestTransferScreen';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -31,6 +33,7 @@ const App: React.FC = () => {
   const [scanResult, setScanResult] = useState<{ item: Item; status: ItemStatus } | null>(null);
   const [generatedItem, setGeneratedItem] = useState<Item | null>(null);
   const [itemToEdit, setItemToEdit] = useState<Item | null>(null);
+  const [itemToView, setItemToView] = useState<Item | null>(null);
   const [myItemsKey, setMyItemsKey] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
@@ -51,7 +54,7 @@ const App: React.FC = () => {
   }, []);
 
   const navigate = (newPath: string) => {
-    window.history.pushState({}, '', newPath);
+    //window.history.pushState({}, '', newPath);
     setPath(newPath);
   };
 
@@ -65,10 +68,25 @@ const App: React.FC = () => {
     setModal(Screen.EditItem);
   }, []);
 
-  const handleScanComplete = useCallback((result: { item: Item; status: ItemStatus }) => {
-    setScanResult(result);
-    setModal(Screen.ScanResult);
+  const handleViewRequest = useCallback((item: Item) => {
+    setItemToView(item);
+    setModal(Screen.ItemDetail);
   }, []);
+
+  const handleScanComplete = useCallback((result: { item: Item; status: ItemStatus }) => {
+    const isOwner = user && result.item.ownerId === user.uid;
+    const status = result.status;
+    
+    // La nueva lógica de "compra"
+    if (!isOwner && status === ItemStatus.EnRegla) {
+      setScanResult(result);
+      setModal(Screen.REQUEST_TRANSFER);
+    } else {
+      // El resto de los casos (es mío, está denunciado, vendido, etc.)
+      setScanResult(result);
+      setModal(Screen.ScanResult);
+    }
+  }, [user]);
 
   const handleGenerateComplete = (result: Item) => {
     setGeneratedItem(result);
@@ -85,6 +103,7 @@ const App: React.FC = () => {
     setModal(null);
     setScanResult(null);
     setItemToEdit(null);
+    setItemToView(null);
   }, []);
 
   const closeGeneratedQr = () => {
@@ -133,9 +152,9 @@ const App: React.FC = () => {
       case Screen.Generate:
         return <GenerateScreen onGenerateComplete={handleGenerateComplete} user={user} onMenuClick={toggleMenu} />;
       case Screen.MyItems:
-        return <MyItemsScreen key={myItemsKey} user={user} onMenuClick={toggleMenu} onEditRequest={handleEditRequest} />;
-      case Screen.Sell:
-        return <SellScreen user={user} onMenuClick={toggleMenu} />;
+        return <MyItemsScreen key={myItemsKey} user={user} onMenuClick={toggleMenu} onEditRequest={handleEditRequest} onViewRequest={handleViewRequest} />;
+      case Screen.TRANSFERS:
+        return <TransfersScreen user={user} onMenuClick={toggleMenu} />;
       default:
         return <HomeScreen onScanRequest={handleScanRequest} onInputCodeRequest={handleInputCodeRequest} onNavigate={handleAppNavigate} onPublicNavigate={navigate} onMenuClick={toggleMenu} />;
     }
@@ -150,8 +169,12 @@ const App: React.FC = () => {
         return <InputCodeScreen onScanComplete={handleScanComplete} onCancel={closeModal} />;
       case Screen.ScanResult:
         return scanResult ? <ResultScreen result={scanResult} onClose={closeModal} /> : null;
+      case Screen.REQUEST_TRANSFER:
+        return scanResult && user ? <RequestTransferScreen item={scanResult.item} user={user} onCancel={closeModal} onRequestSent={closeModal} /> : null;
       case Screen.EditItem:
         return itemToEdit && user ? <EditItemScreen item={itemToEdit} user={user} onEditComplete={handleEditComplete} onCancel={closeModal} /> : null;
+      case Screen.ItemDetail:
+        return itemToView ? <ItemDetailScreen item={itemToView} onDone={closeModal} /> : null;
       default:
         return null;
     }
@@ -193,7 +216,7 @@ const App: React.FC = () => {
             onInputCodeRequest={handleMenuInputCodeRequest}
             onPublicNavigate={handleMenuPublicNavigate}
         />
-        <div className="flex-shrink-0 bg-[#1e2a47] p-2 flex justify-between items-center text-white border-b border-blue-900">
+        <div className="relative z-10 flex-shrink-0 bg-[#1e2a47] p-2 flex justify-between items-center text-white border-b border-blue-900">
             <span className="text-xs truncate">{user.email}</span>
             <button onClick={signOutUser} className="text-xs bg-red-600 px-3 py-1 rounded hover:bg-red-700 transition-colors">Salir</button>
         </div>

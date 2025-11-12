@@ -1,5 +1,6 @@
-
-import { initializeApp } from "firebase/app";
+// FIX: Use the compat library for initialization to support older Firebase SDK versions,
+// while still exporting v9 modular services for the rest of the app to use.
+import firebase from "firebase/compat/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
@@ -13,11 +14,11 @@ const firebaseConfig = {
   appId: "1:953476288560:web:754b1888d2e7469210ddf5"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase using the compat API
+firebase.initializeApp(firebaseConfig);
 
-// Get a Firestore instance
-export const db = getFirestore(app);
+// Get a Firestore instance using the modular API. It will use the default app.
+export const db = getFirestore();
 
-// Get an Auth instance
-export const auth = getAuth(app);
+// Get an Auth instance using the modular API. It will use the default app.
+export const auth = getAuth();

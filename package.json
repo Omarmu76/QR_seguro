@@ -9,13 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "html5-qrcode": "^2.3.8",
     "firebase": "^12.5.0",
+    "react": "^19.2.0",
+    "react-leaflet": "^5.0.0",
     "qrcode.react": "^4.2.0",
     "leaflet": "^1.9.4",
-    "react-leaflet": "^4.2.1"
+    "html5-qrcode": "^2.3.8"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

@@ -1,8 +1,7 @@
 import { collection, addDoc, getDoc, getDocs, query, where, doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { User } from 'firebase/auth';
 import { db } from "../firebaseConfig";
-import { Item, ItemStatus } from '../types';
-
-const itemsCollection = collection(db, "Items");
+import { Item, ItemStatus, TransferRequest, TransferStatus } from '../types';
 
 /**
  * Genera un ID corto legible.
@@ -36,7 +35,7 @@ export const saveItem = async (itemData: Omit<Item, 'qrId' | 'status' | 'ownerId
             ownerId: userId,
             shortId: shortId,
         };
-        const docRef = await addDoc(itemsCollection, newItem);
+        const docRef = await addDoc(collection(db, "Items"), newItem);
         
         // Actualizar el documento con su propio qrId (que es el docRef.id)
         // Esto es útil si alguna vez necesitamos el qrId DENTRO del documento
@@ -91,7 +90,7 @@ export const getItemByQrId = async (qrId: string): Promise<{ item: Item, status:
  */
 export const getItemByShortId = async (shortId: string): Promise<{ item: Item, status: ItemStatus } | null> => {
     try {
-        const q = query(itemsCollection, where("shortId", "==", shortId.toUpperCase()));
+        const q = query(collection(db, "Items"), where("shortId", "==", shortId.toUpperCase()));
         const querySnapshot = await getDocs(q);
         
         if (querySnapshot.empty) {
@@ -232,7 +231,7 @@ export const deleteItem = async (qrId: string, userId: string): Promise<void> =>
  */
 export const getAllUserItems = async (userId: string): Promise<Item[]> => {
     try {
-        const q = query(itemsCollection, where("ownerId", "==", userId));
+        const q = query(collection(db, "Items"), where("ownerId", "==", userId));
         const querySnapshot = await getDocs(q);
         return querySnapshot.docs.map((doc) => {
             const data = doc.data() as Item;
@@ -253,7 +252,7 @@ export const getAllUserItems = async (userId: string): Promise<Item[]> => {
  */
 export const getPublicReportedItems = async (): Promise<Item[]> => {
     try {
-        const q = query(itemsCollection, where("status", "in", [ItemStatus.Denunciado, ItemStatus.Recuperado]));
+        const q = query(collection(db, "Items"), where("status", "in", [ItemStatus.Denunciado, ItemStatus.Recuperado]));
         const querySnapshot = await getDocs(q);
         return querySnapshot.docs.map((doc) => {
              const data = doc.data() as Item;
@@ -303,5 +302,50 @@ export const getUserById = async (userId: string): Promise<{email: string, nombr
         const message = (e instanceof Error) ? e.message : String(e);
         console.error("Error fetching user by ID", message);
         return null;
+    }
+};
+
+/**
+ * Creates a new transfer request in Firestore.
+ */
+export const requestItemTransfer = async (item: Item, buyer: User): Promise<void> => {
+    if (!item.qrId || !item.ownerId) {
+        throw new Error("Datos del item inválidos para la transferencia.");
+    }
+    
+    // 1. Check for existing pending transfers for this item to avoid duplicates
+    const transfersRef = collection(db, "Transfers");
+    const q = query(transfersRef, 
+        where("itemId", "==", item.qrId), 
+        where("status", "==", TransferStatus.Pending)
+    );
+    const existingTransfers = await getDocs(q);
+    if (!existingTransfers.empty) {
+        throw new Error("Ya existe una solicitud de transferencia pendiente para este item.");
+    }
+
+    // 2. Create the new transfer request object
+    const newTransfer: Omit<TransferRequest, 'id'> = {
+        itemId: item.qrId,
+        itemDetails: {
+            tipo: item.tipo,
+            marca: item.marca,
+            modelo: item.modelo,
+            identificador: item.identificador,
+        },
+        sellerId: item.ownerId,
+        buyerId: buyer.uid,
+        buyerEmail: buyer.email,
+        status: TransferStatus.Pending,
+        createdAt: Date.now(),
+    };
+
+    // 3. Save to Firestore
+    try {
+        await addDoc(collection(db, "Transfers"), newTransfer);
+    } catch (error) {
+        const message = (error instanceof Error) ? error.message : String(error);
+        console.error("Error creating transfer request:", message);
+        throw new Error("No se pudo crear la solicitud de transferencia.");
     }
 };

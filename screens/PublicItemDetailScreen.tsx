@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Spinner from '../components/Spinner';
-import QRCode from '../components/QRCode';
+import { QRCodeCanvas } from 'qrcode.react';
 import { getItemById, getUserById, updateItemStatus } from '../services/itemService';
 import { Item, ItemStatus } from '../types';
 
@@ -134,15 +134,25 @@ const PublicItemDetailScreen: React.FC<PublicItemDetailScreenProps> = ({ itemId,
           <div className="text-center text-yellow-300 bg-black/30 p-4 rounded-lg">{error}</div>
         ) : details ? (
           <>
-            <div className="w-full max-w-[200px] mt-4">
+            <div className="w-full max-w-[250px] mt-4">
                 {details.qrId && details.shortId ? (
-                     <QRCode 
-                        qrId={details.qrId} 
-                        shortId={details.shortId} 
-                        canvasId="public-item-detail-qr"
-                     />
+                     <div className="bg-white p-4 rounded-lg shadow-inner flex flex-col items-center space-y-3">
+                        <span className="bg-white px-3 py-1 border-2 border-black rounded-md text-black text-xl font-bold tracking-widest">
+                            {details.shortId}
+                        </span>
+                        <QRCodeCanvas
+                            id="public-item-detail-qr"
+                            value={details.qrId}
+                            size={256}
+                            style={{ width: '100%', height: 'auto' }}
+                            bgColor={"#ffffff"}
+                            fgColor={"#000000"}
+                            level={"H"}
+                            includeMargin={false}
+                        />
+                    </div>
                 ) : (
-                    <div className="w-full h-auto bg-gray-700 flex items-center justify-center p-8 rounded-lg">
+                    <div className="w-full aspect-square bg-gray-700 flex items-center justify-center p-8 rounded-lg">
                         <p>Error al mostrar QR</p>
                     </div>
                 )}
@@ -174,16 +184,16 @@ const PublicItemDetailScreen: React.FC<PublicItemDetailScreenProps> = ({ itemId,
                     href={`https://www.google.com/maps?q=${details.location.lat},${details.location.lng}`}
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="my-4 w-full h-24 bg-blue-700 rounded-lg flex items-center justify-center text-white font-bold text-lg hover:bg-blue-800 transition-colors"
+                    className="w-full bg-blue-700 rounded-lg flex items-center justify-center text-white font-bold text-lg hover:bg-blue-800 transition-colors px-4 py-2 my-2"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
-                    <span className='ml-2'>VER UBICACIÓN DE DENUNCIA</span>
+                    <span className='ml-2 text-center'>VER UBICACIÓN DE DENUNCIA</span>
                 </a>
             ) : (
-                <div className="my-4 w-full h-24 bg-gray-500 rounded-lg flex items-center justify-center opacity-50">
+                <div className="my-2 w-full bg-gray-500 rounded-lg flex items-center justify-center opacity-50 px-4 py-2">
                    <span className='ml-2'>Ubicación no reportada</span>
                 </div>
             )}
@@ -192,11 +202,11 @@ const PublicItemDetailScreen: React.FC<PublicItemDetailScreenProps> = ({ itemId,
             <button
                 onClick={handleRecoverItem}
                 disabled={isUpdating || details.status === ItemStatus.Recuperado}
-                className="w-full bg-blue-800 text-white py-2 rounded-lg font-bold border-2 border-blue-900 shadow-lg disabled:bg-gray-500 disabled:opacity-70 flex justify-center"
+                className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold shadow-lg disabled:bg-gray-500 disabled:opacity-70 flex justify-center items-center transition-colors my-2"
             >
                 {isUpdating ? <Spinner/> : 'MARCAR COMO RECUPERADO'}
             </button>
-            <button onClick={() => onNavigate('/')} className="mt-3 bg-gray-700/50 border-2 border-gray-200/50 px-8 py-1 rounded-md font-semibold">
+            <button onClick={() => onNavigate('/')} className="mt-3 bg-sky-500 text-white px-8 py-2 rounded-lg font-bold hover:bg-sky-600 transition-colors">
               INICIO
             </button>
           </>

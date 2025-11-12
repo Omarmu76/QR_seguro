@@ -1,13 +1,14 @@
+
 import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import L from 'leaflet'; // Import Leaflet para iconos personalizados
+import L from 'leaflet';
 import { Item, ItemStatus } from '../types';
 import { getAllUserItems, getPublicReportedItems } from '../services/itemService';
 import Header from '../components/Header';
 import Spinner from '../components/Spinner';
 
-// Configuración de iconos de Leaflet
+// Configuración de iconos de Leaflet (SIN CAMBIOS)
 const iconReported = new L.Icon({
     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
@@ -25,6 +26,7 @@ const iconMyItem = new L.Icon({
     popupAnchor: [1, -34],
     shadowSize: [41, 41]
 });
+// ---
 
 interface MapScreenProps {
   user: User;
@@ -36,38 +38,31 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Posición inicial del mapa (puedes centrarla en tu ubicación)
   const defaultPosition: [number, number] = [-27.3670, -55.8961]; // Posadas, Misiones
 
   useEffect(() => {
     const fetchMapData = async () => {
       setIsLoading(true);
+      setError(null);
       try {
-        // Obtenemos AMBAS listas: mis items y los denunciados
         const userItems = await getAllUserItems(user.uid);
         const reportedItems = await getPublicReportedItems();
         
-        // Combinamos las listas, asegurándonos de no duplicar
         const allItemsMap = new Map<string, Item>();
-        
-        // Añadimos mis items (solo los denunciados/recuperados tienen ubicación)
         userItems.forEach(item => {
             if (item.qrId && (item.location || item.recoveryLocation)) {
                 allItemsMap.set(item.qrId, item);
             }
         });
-        
-        // Añadimos denuncias públicas (sobrescribe si ya existe, lo cual está bien)
         reportedItems.forEach(item => {
             if (item.qrId && (item.location || item.recoveryLocation)) {
                 allItemsMap.set(item.qrId, item);
             }
         });
-        
         setItems(Array.from(allItemsMap.values()));
         
       } catch (err) {
-        setError("No se pudieron cargar los datos del mapa. (Verifica permisos de DB)");
+        setError("No se pudieron cargar los datos del mapa.");
       } finally {
         setIsLoading(false);
       }
@@ -78,13 +73,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick }) => {
 
   const renderMarkers = () => {
     return items.map(item => {
-      // Priorizar ubicación de recuperación si existe
       const location = item.recoveryLocation || item.location;
       if (!location || !item.qrId) return null;
-      
       const isOwner = item.ownerId === user.uid;
       const isReported = item.status === ItemStatus.Denunciado;
-      
       let markerIcon = iconMyItem;
       if (isReported) markerIcon = iconReported;
       
@@ -112,7 +104,14 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick }) => {
   return (
     <div className="flex flex-col h-full bg-[#0d1226]">
       <Header title="MAPA DE ITEMS" onMenuClick={onMenuClick} />
-      <div className="flex-grow relative">
+      
+      {/*
+        CORRECCIÓN: Se añade 'z-0' para crear un contexto de apilamiento.
+        Esto fuerza a las capas del mapa de Leaflet a permanecer *detrás*
+        de otros elementos con z-index mayor (como la cabecera),
+        solucionando el problema de superposición.
+      */}
+      <div className="flex-grow relative overflow-hidden z-0">
         {isLoading ? (
           <div className="flex justify-center items-center h-full">
             <Spinner />

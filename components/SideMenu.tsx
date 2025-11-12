@@ -19,7 +19,8 @@ const SideMenu: React.FC<SideMenuProps> = ({ isOpen, onClose, onNavigate, onScan
     { label: 'Ingresar Código', action: onInputCodeRequest },
     { label: 'Generar QR', action: () => onNavigate(Screen.Generate) },
     { label: 'Mis Items', action: () => onNavigate(Screen.MyItems) },
-    { label: 'Vender', action: () => onNavigate(Screen.Sell) },
+    // Modificamos la antigua 'Vender' por 'Transferencias'
+    { label: 'Transferencias', action: () => onNavigate(Screen.TRANSFERS) }, // <<< MODIFICAR ESTA LÍNEA
     { label: 'Ver Lista de Denuncias', action: () => onPublicNavigate('/denuncias') },
   ];
 

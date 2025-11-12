@@ -54,7 +54,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onScanRequest, onInputCodeReque
                 
                 <div className="grid grid-cols-2 gap-4">
                     <button onClick={() => onNavigate(Screen.Generate)} className="bg-blue-600 text-white py-3 rounded-lg font-semibold shadow-md transition-colors hover:bg-blue-700">CREAR QR</button>
-                    <button onClick={() => onNavigate(Screen.Sell)} className="bg-green-600 text-white py-3 rounded-lg font-semibold shadow-md transition-colors hover:bg-green-700">VENDER</button>
+                    <button onClick={() => onNavigate(Screen.TRANSFERS)} className="bg-green-600 text-white py-3 rounded-lg font-semibold shadow-md transition-colors hover:bg-green-700">TRANSFERIR</button>
                 </div>
             </div>
         </div>

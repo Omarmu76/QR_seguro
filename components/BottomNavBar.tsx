@@ -53,7 +53,7 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeScreen, setActiveScre
   ];
 
   return (
-    <div className="w-full h-20 bg-[#1e2a47] border-t border-blue-900 flex justify-around items-center absolute bottom-0">
+    <div className="w-full h-20 bg-[#1e2a47] border-t border-blue-900 flex justify-around items-center absolute bottom-0 z-10">
       {navItems.map((item) => (
         <NavIcon
           key={item.screen}
