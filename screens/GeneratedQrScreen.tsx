@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { User } from 'firebase/auth';
 import Header from '../components/Header';
 import QRCode from '../components/QRCode';
-import { Item, ItemStatus } from '../types';
+// FIX: The 'pending' status is now managed by `paymentStatus` from the `PaymentStatus` enum.
+import { Item, ItemStatus, PaymentStatus } from '../types';
 import { updateItemStatus } from '../services/itemService';
 import Spinner from '../components/Spinner';
 
@@ -17,12 +18,13 @@ const GeneratedQrScreen: React.FC<GeneratedQrScreenProps> = ({ item, user, onDon
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // ID único para el canvas, lo usaremos para descargarlo
+  // FIX: An item's pending state is determined by its `paymentStatus`, not its functional `status`.
+  const isPending = item.paymentStatus === PaymentStatus.Pending; // <<< Check for pending status
   const qrCanvasId = "qr-canvas-download";
 
   const handleReport = async () => {
-    if (!item.qrId) {
-      setError("No se puede denunciar un item sin ID.");
+    if (!item.qrId || isPending) { // <<< Prevent report on pending
+      setError("No se puede denunciar un item sin ID o pendiente de activación.");
       return;
     }
     setIsLoading(true);
@@ -37,7 +39,6 @@ const GeneratedQrScreen: React.FC<GeneratedQrScreenProps> = ({ item, user, onDon
     }
   };
 
-  // --- NUEVA FUNCIÓN DE COMPARTIR ---
   const handleShare = async () => {
     const canvas = document.getElementById(qrCanvasId) as HTMLCanvasElement;
     if (!canvas) {
@@ -46,12 +47,10 @@ const GeneratedQrScreen: React.FC<GeneratedQrScreenProps> = ({ item, user, onDon
     }
 
     try {
-      // Convertir canvas a Blob (formato de archivo)
       const dataUrl = canvas.toDataURL('image/png');
       const blob = await (await fetch(dataUrl)).blob();
       const file = new File([blob], `qr-${item.shortId || 'item'}.png`, { type: blob.type });
 
-      // Usar Web Share API si está disponible (móviles)
       if (navigator.share && navigator.canShare({ files: [file] })) {
         await navigator.share({
           title: `QR Item ${item.marca}`,
@@ -59,7 +58,6 @@ const GeneratedQrScreen: React.FC<GeneratedQrScreenProps> = ({ item, user, onDon
           files: [file],
         });
       } else {
-        // Fallback: Descarga simple (escritorio)
         const link = document.createElement('a');
         link.href = dataUrl;
         link.download = `qr-${item.shortId || 'item'}.png`;
@@ -68,14 +66,12 @@ const GeneratedQrScreen: React.FC<GeneratedQrScreenProps> = ({ item, user, onDon
         document.body.removeChild(link);
       }
     } catch (err: any) {
-      // No mostrar error si el usuario cancela el diálogo de compartir
       if (err.name !== 'AbortError') {
          setError("Error al compartir el QR.");
          console.error(err);
       }
     }
   };
-  // --- FIN NUEVA FUNCIÓN ---
 
   return (
     <div className="flex flex-col h-full bg-[#0d1226] text-white">
@@ -87,7 +83,7 @@ const GeneratedQrScreen: React.FC<GeneratedQrScreenProps> = ({ item, user, onDon
                 <QRCode
                   qrId={item.qrId}
                   shortId={item.shortId}
-                  canvasId={qrCanvasId} // <<< PASAMOS EL ID AL COMPONENTE
+                  canvasId={qrCanvasId}
                 />
             ) : (
                 <div className="w-full h-auto bg-gray-700 flex items-center justify-center p-8">
@@ -110,6 +106,11 @@ const GeneratedQrScreen: React.FC<GeneratedQrScreenProps> = ({ item, user, onDon
                 <p><span className="font-semibold text-gray-300">Modelo:</span> {item.modelo}</p>
                 <p><span className="font-semibold text-gray-300">ID:</span> {item.identificador}</p>
             </div>
+            {isPending && (
+              <p className="text-center text-yellow-400 mt-3 border-t border-gray-700 pt-3 text-sm">
+                ¡Item pendiente! Actívalo desde "Mis Items" para usar todas las funciones.
+              </p>
+            )}
         </div>
 
         {error && <p className="text-red-500 text-center text-sm my-2">{error}</p>}
@@ -124,8 +125,8 @@ const GeneratedQrScreen: React.FC<GeneratedQrScreenProps> = ({ item, user, onDon
           
           <button
             onClick={handleReport}
-            disabled={isReported || isLoading}
-            className={`w-full py-3 rounded-lg text-lg font-bold flex justify-center items-center transition-colors ${isReported ? 'bg-gray-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+            disabled={isReported || isLoading || isPending} // <<< DESHABILITADO SI ESTA PENDIENTE
+            className={`w-full py-3 rounded-lg text-lg font-bold flex justify-center items-center transition-colors ${isReported || isPending ? 'bg-gray-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
           >
             {isLoading ? <Spinner /> : (isReported ? 'DENUNCIADO' : 'DENUNCIAR ROBO')}
           </button>

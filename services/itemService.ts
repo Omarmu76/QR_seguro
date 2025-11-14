@@ -1,7 +1,15 @@
-import { collection, addDoc, getDoc, getDocs, query, where, doc, deleteDoc, updateDoc, writeBatch, serverTimestamp, orderBy, Timestamp, limit } from "firebase/firestore";
+// Archivo: services/itemService.ts
+// Explicación: Importamos PaymentStatus y lo asignamos
+// por defecto en la función saveItem.
+
+import { 
+  collection, addDoc, getDoc, getDocs, query, where, doc, deleteDoc, updateDoc, 
+  writeBatch, serverTimestamp, orderBy, Timestamp, limit 
+} from "firebase/firestore";
 import { User } from 'firebase/auth';
 import { db } from "../firebaseConfig";
-import { Item, ItemStatus, TransferRequest, TransferStatus } from '../types';
+// <<< MODIFICAMOS ESTA LÍNEA para incluir PaymentStatus >>>
+import { Item, ItemStatus, TransferRequest, TransferStatus, PaymentStatus } from '../types';
 
 /**
  * Genera un ID corto legible.
@@ -23,22 +31,21 @@ const generateShortId = (length: number = 6): string => {
 
 /**
  * Saves a new item to the Firestore "Items" collection with an owner ID.
+ * <<< AHORA INICIA CON ESTADO DE PAGO 'PENDIENTE' >>>
  */
 export const saveItem = async (itemData: Omit<Item, 'qrId' | 'status' | 'ownerId' | 'shortId'>, userId: string): Promise<Item> => {
     try {
-        // Generar el nuevo ID corto
         const shortId = generateShortId(6);
 
         const newItem: Omit<Item, 'qrId'> = {
             ...itemData,
-            status: ItemStatus.EnRegla,
+            status: ItemStatus.EnRegla, // El item nace funcionalmente 'En Regla'
             ownerId: userId,
             shortId: shortId,
+            paymentStatus: PaymentStatus.Pending, // <<< AÑADE ESTA LÍNEA (Bloqueado por defecto)
         };
         const docRef = await addDoc(collection(db, "Items"), newItem);
         
-        // Actualizar el documento con su propio qrId (que es el docRef.id)
-        // Esto es útil si alguna vez necesitamos el qrId DENTRO del documento
         await updateDoc(docRef, { qrId: docRef.id });
 
         return {
@@ -64,14 +71,8 @@ export const getItemByQrId = async (qrId: string): Promise<{ item: Item, status:
             const data = docSnap.data() as Item;
             return {
                 item: {
+                    ...data,
                     qrId: docSnap.id,
-                    tipo: data.tipo,
-                    marca: data.marca,
-                    modelo: data.modelo,
-                    identificador: data.identificador,
-                    ownerId: data.ownerId,
-                    status: data.status,
-                    shortId: data.shortId,
                 },
                 status: data.status || ItemStatus.EnRegla,
             };
@@ -102,14 +103,8 @@ export const getItemByShortId = async (shortId: string): Promise<{ item: Item, s
         
         return {
             item: {
+                ...data,
                 qrId: docSnap.id,
-                tipo: data.tipo,
-                marca: data.marca,
-                modelo: data.modelo,
-                identificador: data.identificador,
-                ownerId: data.ownerId,
-                status: data.status,
-                shortId: data.shortId,
             },
             status: data.status || ItemStatus.EnRegla,
         };

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User } from 'firebase/auth';
 import Header from '../components/Header';
-import { Item, ItemStatus } from '../types';
+// FIX: The 'pending' status is now managed by `paymentStatus` from the `PaymentStatus` enum.
+import { Item, ItemStatus, PaymentStatus } from '../types';
 import { getAllUserItems, deleteItem, updateItemStatus } from '../services/itemService';
 import Spinner from '../components/Spinner';
 import ConfirmationModal from '../components/ConfirmationModal';
@@ -36,6 +37,14 @@ const ShieldCheckIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   </svg>
 );
 
+// <<< NUEVO ICONO DE PAGO >>>
+const DollarSignIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 11.21 12.75 11 12 11c-.75 0-1.536.21-2.218.659-.682.448-1.172 1.305-1.172 2.225v.002Z" />
+  </svg>
+);
+
+
 // --- Helper de Geolocalización ---
 const getCurrentLocation = (): Promise<{ lat: number, lng: number }> => {
   return new Promise((resolve, reject) => {
@@ -65,19 +74,23 @@ const getCurrentLocation = (): Promise<{ lat: number, lng: number }> => {
 // --- Fin Helper ---
 
 
-const ItemCard: React.FC<{ item: Item; onUnreport: () => void; onReport: () => void; onDelete: () => void; onEdit: () => void; onView: () => void; }> = ({ item, onUnreport, onReport, onDelete, onEdit, onView }) => {
+const ItemCard: React.FC<{ item: Item; onUnreport: () => void; onReport: () => void; onDelete: () => void; onEdit: () => void; onView: () => void; onActivate: () => void; }> = ({ item, onUnreport, onReport, onDelete, onEdit, onView, onActivate }) => {
   const isReported = item.status === ItemStatus.Denunciado;
   const isSold = item.status === ItemStatus.Vendido;
+  // FIX: An item's pending state is determined by its `paymentStatus`, not its functional `status`.
+  const isPending = item.paymentStatus === PaymentStatus.Pending;
+
   let borderColor = 'border-green-500';
   if(isReported) borderColor = 'border-red-500';
   if(isSold) borderColor = 'border-gray-400';
+  if(isPending) borderColor = 'border-yellow-500';
   
   return (
     <div className={`p-4 rounded-lg border-l-4 ${borderColor} bg-gray-800/80 flex items-center justify-between`}>
       <div>
         <p className="font-bold text-white text-lg">{item.marca} {item.modelo}</p>
         <p className="text-sm text-gray-300">{item.tipo} - ID: {item.identificador}</p>
-        <p className={`text-xs font-bold mt-1 ${isReported ? 'text-red-400' : isSold ? 'text-gray-400' : 'text-green-400'}`}>
+        <p className={`text-xs font-bold mt-1 ${isReported ? 'text-red-400' : isSold ? 'text-gray-400' : isPending ? 'text-yellow-400' : 'text-green-400'}`}>
           ESTADO: {item.status?.replace('_', ' ') || 'EN REGLA'}
         </p>
       </div>
@@ -91,13 +104,22 @@ const ItemCard: React.FC<{ item: Item; onUnreport: () => void; onReport: () => v
           </button>
           <button 
             onClick={onEdit}
-            disabled={isSold}
+            disabled={isSold || isPending} // <<< Deshabilitado si está pendiente
             className="p-2 rounded-full text-gray-400 hover:bg-blue-900/50 hover:text-blue-400 transition-colors disabled:opacity-50"
             aria-label="Editar item"
           >
               <PencilIcon className="h-6 w-6"/>
           </button>
-          {isReported ? (
+          
+          {isPending ? (
+             <button 
+                onClick={onActivate}
+                className="p-2 rounded-full text-gray-400 bg-green-900/50 hover:bg-green-800 hover:text-white transition-colors"
+                aria-label="Activar item"
+            >
+                <DollarSignIcon className="h-6 w-6"/>
+            </button>
+          ) : isReported ? (
                <button 
                   onClick={onUnreport}
                   className="p-2 rounded-full text-gray-400 hover:bg-green-900/50 hover:text-green-400 transition-colors"
@@ -115,6 +137,7 @@ const ItemCard: React.FC<{ item: Item; onUnreport: () => void; onReport: () => v
                   <AlertIcon className="h-6 w-6"/>
               </button>
           )}
+
           <button 
               onClick={onDelete}
               className="p-2 rounded-full text-gray-400 hover:bg-red-900/50 hover:text-red-400 transition-colors"
@@ -132,9 +155,10 @@ interface MyItemsScreenProps {
   onMenuClick: () => void;
   onEditRequest: (item: Item) => void;
   onViewRequest: (item: Item) => void;
+  onActivateRequest: (item: Item) => void; // <<< NUEVA PROP
 }
 
-const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEditRequest, onViewRequest }) => {
+const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEditRequest, onViewRequest, onActivateRequest }) => {
   const [items, setItems] = useState<Item[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -146,6 +170,14 @@ const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEdit
     setIsLoading(true);
     try {
       const userItems = await getAllUserItems(user.uid);
+      // Ordenar: PENDIENTE primero, luego el resto
+      userItems.sort((a, b) => {
+        // FIX: Sort items based on `paymentStatus` to show pending items first.
+        if (a.paymentStatus === PaymentStatus.Pending && b.paymentStatus !== PaymentStatus.Pending) return -1;
+        // FIX: Sort items based on `paymentStatus` to show pending items first.
+        if (a.paymentStatus !== PaymentStatus.Pending && b.paymentStatus === PaymentStatus.Pending) return 1;
+        return 0;
+      });
       setItems(userItems);
     } catch (err) {
       setError("No se pudieron cargar los items.");
@@ -249,6 +281,7 @@ const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEdit
                     onDelete={() => handleDeleteRequest(item)}
                     onEdit={() => onEditRequest(item)}
                     onView={() => onViewRequest(item)}
+                    onActivate={() => onActivateRequest(item)} // <<< PASAMOS EL HANDLER
                   />
                 )}
               </React.Fragment>

@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
-import { Item, ItemStatus } from '../types';
+// FIX: The 'pending' status is now managed by `paymentStatus` from the `PaymentStatus` enum.
+import { Item, ItemStatus, PaymentStatus } from '../types';
 import { getAllUserItems, getPublicReportedItems } from '../services/itemService';
 import Header from '../components/Header';
 import Spinner from '../components/Spinner';
@@ -49,16 +50,18 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick }) => {
         const reportedItems = await getPublicReportedItems();
         
         const allItemsMap = new Map<string, Item>();
-        userItems.forEach(item => {
-            if (item.qrId && (item.location || item.recoveryLocation)) {
+        
+        // Función para agregar items al mapa si tienen ubicación y NO están pendientes
+        const addItemToMap = (item: Item) => {
+            // FIX: Check `paymentStatus` to exclude unpaid/pending items from the map.
+            if (item.qrId && (item.location || item.recoveryLocation) && item.paymentStatus !== PaymentStatus.Pending) {
                 allItemsMap.set(item.qrId, item);
             }
-        });
-        reportedItems.forEach(item => {
-            if (item.qrId && (item.location || item.recoveryLocation)) {
-                allItemsMap.set(item.qrId, item);
-            }
-        });
+        };
+
+        userItems.forEach(addItemToMap);
+        reportedItems.forEach(addItemToMap);
+        
         setItems(Array.from(allItemsMap.values()));
         
       } catch (err) {
@@ -105,12 +108,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick }) => {
     <div className="flex flex-col h-full bg-[#0d1226]">
       <Header title="MAPA DE ITEMS" onMenuClick={onMenuClick} />
       
-      {/*
-        CORRECCIÓN: Se añade 'z-0' para crear un contexto de apilamiento.
-        Esto fuerza a las capas del mapa de Leaflet a permanecer *detrás*
-        de otros elementos con z-index mayor (como la cabecera),
-        solucionando el problema de superposición.
-      */}
       <div className="flex-grow relative overflow-hidden z-0">
         {isLoading ? (
           <div className="flex justify-center items-center h-full">

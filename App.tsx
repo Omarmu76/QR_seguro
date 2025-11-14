@@ -21,6 +21,7 @@ import EditItemScreen from './screens/EditItemScreen';
 import MapScreen from './screens/MapScreen';
 import ItemDetailScreen from './screens/ItemDetailScreen';
 import RequestTransferScreen from './screens/RequestTransferScreen'; // Pantalla del Comprador
+import PaymentScreen from './screens/PaymentScreen'; // <<< NUEVA PANTALLA DE PAGO
 
 // Importaciones de Componentes
 import BottomNavBar from './components/BottomNavBar';
@@ -41,8 +42,8 @@ const App: React.FC = () => {
   const [generatedItem, setGeneratedItem] = useState<Item | null>(null);
   const [itemToEdit, setItemToEdit] = useState<Item | null>(null);
   const [itemToView, setItemToView] = useState<Item | null>(null);
-  // Estado para el item que se va a transferir (el que ve el comprador)
-  const [itemToTransfer, setItemToTransfer] = useState<Item | null>(null); // <<< ESTADO CORREGIDO
+  const [itemToTransfer, setItemToTransfer] = useState<Item | null>(null);
+  const [itemToActivate, setItemToActivate] = useState<Item | null>(null); // <<< NUEVO ESTADO PARA PAGO
   
   const [myItemsKey, setMyItemsKey] = useState(0);
   const [path, setPath] = useState(window.location.pathname);
@@ -81,26 +82,35 @@ const App: React.FC = () => {
     setItemToView(item);
     setModal(Screen.ItemDetail);
   }, []);
+  
+  // <<< NUEVO HANDLER PARA ACTIVAR ITEM >>>
+  const handleActivateRequest = useCallback((item: Item) => {
+    setItemToActivate(item);
+    // FIX: Property 'Payment' does not exist on type 'typeof Screen'. Use 'PAYMENT_MODAL' instead.
+    setModal(Screen.PAYMENT_MODAL);
+  }, []);
+  
+  // <<< NUEVO HANDLER PARA CIERRE DE PAGO >>>
+  const handleActivationComplete = useCallback(() => {
+    setItemToActivate(null);
+    setModal(null);
+    setMyItemsKey(c => c + 1); // Refresca 'Mis Items'
+  }, []);
 
-  // <<< LÓGICA DE INTERCEPCIÓN (CORREGIDA) >>>
   const handleScanComplete = useCallback((result: { item: Item; status: ItemStatus }) => {
-    if (!user) return; // Si no hay usuario, no hacer nada (no debería pasar)
+    if (!user) return;
 
     const isOwner = result.item.ownerId === user.uid;
     const status = result.status;
     
-    // CASO 1: El item está 'En Regla' Y NO es mío.
     if (!isOwner && status === ItemStatus.EnRegla) {
-      // ¡Es un intento de COMPRA!
-      setItemToTransfer(result.item); // <<< Guardamos el item para el modal de transferencia
-      setModal(Screen.REQUEST_TRANSFER); // <<< Abrimos el modal de solicitud
+      setItemToTransfer(result.item);
+      setModal(Screen.REQUEST_TRANSFER);
     } else {
-      // CASO 2: Es mío, o está Denunciado, Vendido, etc.
-      // Mostramos la pantalla de resultado normal.
       setScanResult(result);
       setModal(Screen.ScanResult);
     }
-  }, [user]); // <<< Depende del 'user' para saber si es el dueño
+  }, [user]);
 
   const handleGenerateComplete = (result: Item) => {
     setGeneratedItem(result);
@@ -110,7 +120,7 @@ const App: React.FC = () => {
   const handleEditComplete = useCallback(() => {
     setItemToEdit(null);
     setModal(null);
-    setMyItemsKey(c => c + 1); // Refresca 'Mis Items'
+    setMyItemsKey(c => c + 1);
   }, []);
 
   const closeModal = useCallback(() => {
@@ -118,7 +128,8 @@ const App: React.FC = () => {
     setScanResult(null);
     setItemToEdit(null);
     setItemToView(null);
-    setItemToTransfer(null); // <<< Limpiamos el item a transferir
+    setItemToTransfer(null);
+    setItemToActivate(null); // <<< Limpiamos el item a activar
   }, []);
 
   const closeGeneratedQr = () => {
@@ -126,7 +137,6 @@ const App: React.FC = () => {
     setActiveScreen(Screen.Home);
   };
 
-  // ... (Handlers del Menú: handleMenuNavigate, handleMenuScanRequest, etc. no cambian) ...
   const handleMenuNavigate = (screen: Screen) => {
     setPath('/');
     setActiveScreen(screen);
@@ -165,8 +175,8 @@ const App: React.FC = () => {
       case Screen.Generate:
         return <GenerateScreen onGenerateComplete={handleGenerateComplete} user={user} onMenuClick={toggleMenu} />;
       case Screen.MyItems:
-        return <MyItemsScreen key={myItemsKey} user={user} onMenuClick={toggleMenu} onEditRequest={handleEditRequest} onViewRequest={handleViewRequest} />;
-      case Screen.TRANSFERS: // <<< (Ya actualizado en el paso anterior)
+        return <MyItemsScreen key={myItemsKey} user={user} onMenuClick={toggleMenu} onEditRequest={handleEditRequest} onViewRequest={handleViewRequest} onActivateRequest={handleActivateRequest} />;
+      case Screen.TRANSFERS:
         return <TransfersScreen user={user} onMenuClick={toggleMenu} />;
       default:
         return <HomeScreen onScanRequest={handleScanRequest} onInputCodeRequest={handleInputCodeRequest} onNavigate={handleAppNavigate} onPublicNavigate={navigate} onMenuClick={toggleMenu} />;
@@ -183,15 +193,13 @@ const App: React.FC = () => {
       case Screen.ScanResult:
         return scanResult ? <ResultScreen result={scanResult} onClose={closeModal} /> : null;
       
-      // <<< RENDER DEL MODAL DE TRANSFERENCIA (CORREGIDO) >>>
       case Screen.REQUEST_TRANSFER:
-        // Usamos 'itemToTransfer' en lugar de 'scanResult'
         return itemToTransfer && user ? ( 
           <RequestTransferScreen 
             item={itemToTransfer} 
             user={user} 
-            onCancel={closeModal} // Prop 'onCancel'
-            onRequestSent={closeModal} // Prop 'onRequestSent'
+            onCancel={closeModal}
+            onRequestSent={closeModal}
           />
         ) : null;
         
@@ -199,13 +207,25 @@ const App: React.FC = () => {
         return itemToEdit && user ? <EditItemScreen item={itemToEdit} user={user} onEditComplete={handleEditComplete} onCancel={closeModal} /> : null;
       case Screen.ItemDetail:
         return itemToView ? <ItemDetailScreen item={itemToView} onDone={closeModal} /> : null;
+      
+      // <<< RENDER DEL MODAL DE PAGO >>>
+      // FIX: Property 'Payment' does not exist on type 'typeof Screen'. Use 'PAYMENT_MODAL' instead.
+      case Screen.PAYMENT_MODAL:
+        return itemToActivate && user ? (
+            <PaymentScreen
+                item={itemToActivate}
+                user={user}
+                onActivationComplete={handleActivationComplete}
+                onCancel={closeModal}
+            />
+        ) : null;
+        
       default:
         return null;
     }
   };
 
   const renderContent = () => {
-    // ... (El resto de la función no cambia)
     if (path.startsWith('/denuncias')) {
       const parts = path.split('/');
       const itemId = parts[2];
