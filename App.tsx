@@ -27,52 +27,48 @@ import PaymentScreen from './screens/PaymentScreen'; // <<< NUEVA PANTALLA DE PA
 import BottomNavBar from './components/BottomNavBar';
 import Spinner from './components/Spinner';
 import SideMenu from './components/SideMenu';
+import QRScannerModal from './components/common/QRScannerModal';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authScreen, setAuthScreen] = useState<'login' | 'register'>('login');
-  
+
   const [activeScreen, setActiveScreen] = useState<Screen>(Screen.Home);
   const [modal, setModal] = useState<Screen | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  
-  // Estados para los modales
-  const [scanResult, setScanResult] = useState<{ item: Item; status: ItemStatus } | null>(null);
+  const [qrMode, setQrMode] = useState<'SEARCH' | 'TRANSFER' | null>(null);
   const [generatedItem, setGeneratedItem] = useState<Item | null>(null);
+  const [scanResult, setScanResult] = useState<{ item: Item; status: ItemStatus } | null>(null);
+  const [itemToTransfer, setItemToTransfer] = useState<Item | null>(null);
   const [itemToEdit, setItemToEdit] = useState<Item | null>(null);
   const [itemToView, setItemToView] = useState<Item | null>(null);
-  const [itemToTransfer, setItemToTransfer] = useState<Item | null>(null);
-  const [itemToActivate, setItemToActivate] = useState<Item | null>(null); // <<< NUEVO ESTADO PARA PAGO
-  
+  const [itemToActivate, setItemToActivate] = useState<Item | null>(null);
   const [myItemsKey, setMyItemsKey] = useState(0);
   const [path, setPath] = useState(window.location.pathname);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChange((firebaseUser) => {
-      setUser(firebaseUser);
-      setAuthLoading(false);
-    });
-    const handlePopState = () => setPath(window.location.pathname);
-    window.addEventListener('popstate', handlePopState);
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | undefined>(undefined);
 
-    return () => {
-      unsubscribe();
-      window.removeEventListener('popstate', handlePopState);
-    };
+  // Navigation helper
+  const navigate = useCallback((url: string) => {
+    window.history.pushState({}, '', url);
+    setPath(url);
   }, []);
 
-  const navigate = (newPath: string) => {
-    // window.history.pushState({}, '', newPath); // Comentado por conflicto con iframe
-    setPath(newPath);
-  };
-
-  const toggleMenu = () => setIsMenuOpen(prev => !prev);
-
-  // --- Handlers para abrir modales ---
+  // Handlers
   const handleScanRequest = useCallback(() => setModal(Screen.Scan), []);
   const handleInputCodeRequest = useCallback(() => setModal(Screen.InputCode), []);
-  
+  const handleAppNavigate = useCallback((screen: Screen) => setActiveScreen(screen), []);
+  const toggleMenu = useCallback(() => setIsMenuOpen(prev => !prev), []);
+
+  const handleGenerateComplete = useCallback((item: Item) => {
+    setGeneratedItem(item);
+  }, []);
+
+  const closeGeneratedQr = useCallback(() => {
+    setGeneratedItem(null);
+  }, []);
+
   const handleEditRequest = useCallback((item: Item) => {
     setItemToEdit(item);
     setModal(Screen.EditItem);
@@ -82,96 +78,100 @@ const App: React.FC = () => {
     setItemToView(item);
     setModal(Screen.ItemDetail);
   }, []);
-  
-  // <<< NUEVO HANDLER PARA ACTIVAR ITEM >>>
+
   const handleActivateRequest = useCallback((item: Item) => {
     setItemToActivate(item);
-    // FIX: Property 'Payment' does not exist on type 'typeof Screen'. Use 'PAYMENT_MODAL' instead.
     setModal(Screen.PAYMENT_MODAL);
   }, []);
-  
-  // <<< NUEVO HANDLER PARA CIERRE DE PAGO >>>
-  const handleActivationComplete = useCallback(() => {
-    setItemToActivate(null);
-    setModal(null);
-    setMyItemsKey(c => c + 1); // Refresca 'Mis Items'
-  }, []);
 
-  const handleScanComplete = useCallback((result: { item: Item; status: ItemStatus }) => {
-    if (!user) return;
-
-    const isOwner = result.item.ownerId === user.uid;
-    const status = result.status;
-    
-    if (!isOwner && status === ItemStatus.EnRegla) {
-      setItemToTransfer(result.item);
-      setModal(Screen.REQUEST_TRANSFER);
-    } else {
-      setScanResult(result);
-      setModal(Screen.ScanResult);
-    }
-  }, [user]);
-
-  const handleGenerateComplete = (result: Item) => {
-    setGeneratedItem(result);
-    setActiveScreen(Screen.GeneratedQR);
-  };
-  
-  const handleEditComplete = useCallback(() => {
-    setItemToEdit(null);
-    setModal(null);
-    setMyItemsKey(c => c + 1);
+  const handleScanComplete = useCallback((result: any) => {
+    setScanResult(result);
+    setModal(Screen.ScanResult);
   }, []);
 
   const closeModal = useCallback(() => {
     setModal(null);
-    setScanResult(null);
     setItemToEdit(null);
     setItemToView(null);
     setItemToTransfer(null);
-    setItemToActivate(null); // <<< Limpiamos el item a activar
+    setItemToActivate(null);
+    setScanResult(null);
   }, []);
 
-  const closeGeneratedQr = () => {
-    setGeneratedItem(null);
-    setActiveScreen(Screen.Home);
-  };
+  const handleEditComplete = useCallback(() => {
+    setModal(null);
+    setMyItemsKey(prev => prev + 1);
+  }, []);
 
-  const handleMenuNavigate = (screen: Screen) => {
-    setPath('/');
+  const handleActivationComplete = useCallback(() => {
+    setModal(null);
+    setMyItemsKey(prev => prev + 1);
+  }, []);
+
+  const handleViewOnMap = useCallback((location: { lat: number; lng: number }) => {
+    setMapCenter(location);
+    setActiveScreen(Screen.Map);
+    navigate('/'); // Clear specific path to show main app
+  }, [navigate]);
+
+  // Menu Handlers
+  const handleMenuNavigate = useCallback((screen: Screen) => {
     setActiveScreen(screen);
     setIsMenuOpen(false);
-  };
-  const handleMenuScanRequest = () => {
-    handleScanRequest();
-    setIsMenuOpen(false);
-  };
-  const handleMenuInputCodeRequest = () => {
-    handleInputCodeRequest();
-    setIsMenuOpen(false);
-  };
-  const handleMenuPublicNavigate = (newPath: string) => {
-    navigate(newPath);
-    setIsMenuOpen(false);
-  };
-  const handleAppNavigate = (screen: Screen) => {
-     setPath('/');
-     setActiveScreen(screen);
-  };
+  }, []);
 
-  // --- Renders ---
+  const handleMenuScanRequest = useCallback(() => {
+    setModal(Screen.Scan);
+    setIsMenuOpen(false);
+  }, []);
+
+  const handleMenuInputCodeRequest = useCallback(() => {
+    setModal(Screen.InputCode);
+    setIsMenuOpen(false);
+  }, []);
+
+  const handleMenuPublicNavigate = useCallback((url: string) => {
+    navigate(url);
+    setIsMenuOpen(false);
+  }, [navigate]);
+
+  // QR Scan Result Handler
+  const handleScanResult = useCallback((decodedText: string) => {
+    setQrMode(null);
+    if (qrMode === 'SEARCH') {
+      alert(`Buscando item: ${decodedText}`);
+    } else if (qrMode === 'TRANSFER') {
+      alert(`Iniciando transferencia para: ${decodedText}`);
+    }
+  }, [qrMode]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChange((user) => {
+      setUser(user);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Estados para los modales
   const renderActiveScreen = () => {
     if (!user) return null;
 
     if (generatedItem) {
-      return <GeneratedQrScreen item={generatedItem} onDone={closeGeneratedQr} user={user}/>;
+      return <GeneratedQrScreen item={generatedItem} onDone={closeGeneratedQr} user={user} />;
     }
-    
+
     switch (activeScreen) {
       case Screen.Home:
         return <HomeScreen onScanRequest={handleScanRequest} onInputCodeRequest={handleInputCodeRequest} onNavigate={handleAppNavigate} onPublicNavigate={navigate} onMenuClick={toggleMenu} />;
       case Screen.Map:
-        return <MapScreen user={user} onMenuClick={toggleMenu} />;
+        return <MapScreen user={user} onMenuClick={toggleMenu} onQrSearchClick={() => setQrMode('SEARCH')} initialCenter={mapCenter} />;
       case Screen.Generate:
         return <GenerateScreen onGenerateComplete={handleGenerateComplete} user={user} onMenuClick={toggleMenu} />;
       case Screen.MyItems:
@@ -183,6 +183,7 @@ const App: React.FC = () => {
     }
   };
 
+
   const renderModal = () => {
     if (!modal) return null;
     switch (modal) {
@@ -192,34 +193,34 @@ const App: React.FC = () => {
         return <InputCodeScreen onScanComplete={handleScanComplete} onCancel={closeModal} />;
       case Screen.ScanResult:
         return scanResult ? <ResultScreen result={scanResult} onClose={closeModal} /> : null;
-      
+
       case Screen.REQUEST_TRANSFER:
-        return itemToTransfer && user ? ( 
-          <RequestTransferScreen 
-            item={itemToTransfer} 
-            user={user} 
+        return itemToTransfer && user ? (
+          <RequestTransferScreen
+            item={itemToTransfer}
+            user={user}
             onCancel={closeModal}
             onRequestSent={closeModal}
           />
         ) : null;
-        
+
       case Screen.EditItem:
         return itemToEdit && user ? <EditItemScreen item={itemToEdit} user={user} onEditComplete={handleEditComplete} onCancel={closeModal} /> : null;
       case Screen.ItemDetail:
         return itemToView ? <ItemDetailScreen item={itemToView} onDone={closeModal} /> : null;
-      
+
       // <<< RENDER DEL MODAL DE PAGO >>>
       // FIX: Property 'Payment' does not exist on type 'typeof Screen'. Use 'PAYMENT_MODAL' instead.
       case Screen.PAYMENT_MODAL:
         return itemToActivate && user ? (
-            <PaymentScreen
-                item={itemToActivate}
-                user={user}
-                onActivationComplete={handleActivationComplete}
-                onCancel={closeModal}
-            />
+          <PaymentScreen
+            item={itemToActivate}
+            user={user}
+            onActivationComplete={handleActivationComplete}
+            onCancel={closeModal}
+          />
         ) : null;
-        
+
       default:
         return null;
     }
@@ -230,7 +231,7 @@ const App: React.FC = () => {
       const parts = path.split('/');
       const itemId = parts[2];
       if (itemId) {
-        return <PublicItemDetailScreen itemId={itemId} onNavigate={navigate} />;
+        return <PublicItemDetailScreen itemId={itemId} onNavigate={navigate} onViewOnMap={handleViewOnMap} />;
       }
       return <PublicReportedListScreen onNavigate={navigate} />;
     }
@@ -250,17 +251,17 @@ const App: React.FC = () => {
     }
     return (
       <>
-        <SideMenu 
-            isOpen={isMenuOpen}
-            onClose={() => setIsMenuOpen(false)}
-            onNavigate={handleMenuNavigate}
-            onScanRequest={handleMenuScanRequest}
-            onInputCodeRequest={handleMenuInputCodeRequest}
-            onPublicNavigate={handleMenuPublicNavigate}
+        <SideMenu
+          isOpen={isMenuOpen}
+          onClose={() => setIsMenuOpen(false)}
+          onNavigate={handleMenuNavigate}
+          onScanRequest={handleMenuScanRequest}
+          onInputCodeRequest={handleMenuInputCodeRequest}
+          onPublicNavigate={handleMenuPublicNavigate}
         />
         <div className="relative z-10 flex-shrink-0 bg-[#1e2a47] p-2 flex justify-between items-center text-white border-b border-blue-900">
-            <span className="text-xs truncate">{user.email}</span>
-            <button onClick={signOutUser} className="text-xs bg-red-600 px-3 py-1 rounded hover:bg-red-700 transition-colors">Salir</button>
+          <span className="text-xs truncate">{user.email}</span>
+          <button onClick={signOutUser} className="text-xs bg-red-600 px-3 py-1 rounded hover:bg-red-700 transition-colors">Salir</button>
         </div>
         <div className="flex-grow overflow-y-auto">
           {renderActiveScreen()}
@@ -275,6 +276,15 @@ const App: React.FC = () => {
     <div className="bg-gray-900 min-h-screen flex items-center justify-center">
       <div className="w-full max-w-sm h-[800px] max-h-[90vh] bg-[#0d1226] rounded-3xl shadow-2xl overflow-hidden flex flex-col relative">
         {renderContent()}
+
+        {/* --- MODAL DE ESCÁNER QR --- */}
+        {qrMode && (
+          <QRScannerModal
+            title={qrMode === 'SEARCH' ? "Escanear Item" : "Escanear para Transferir"}
+            onClose={() => setQrMode(null)}
+            onScanSuccess={handleScanResult}
+          />
+        )}
       </div>
     </div>
   );
