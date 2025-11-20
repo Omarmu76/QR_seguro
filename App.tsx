@@ -32,11 +32,11 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authScreen, setAuthScreen] = useState<'login' | 'register'>('login');
-  
+
   const [activeScreen, setActiveScreen] = useState<Screen>(Screen.Home);
   const [modal, setModal] = useState<Screen | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  
+
   // Estados para los modales
   const [scanResult, setScanResult] = useState<{ item: Item; status: ItemStatus } | null>(null);
   const [generatedItem, setGeneratedItem] = useState<Item | null>(null);
@@ -44,7 +44,7 @@ const App: React.FC = () => {
   const [itemToView, setItemToView] = useState<Item | null>(null);
   const [itemToTransfer, setItemToTransfer] = useState<Item | null>(null);
   const [itemToActivate, setItemToActivate] = useState<Item | null>(null); // <<< NUEVO ESTADO PARA PAGO
-  
+
   const [myItemsKey, setMyItemsKey] = useState(0);
   const [path, setPath] = useState(window.location.pathname);
 
@@ -72,7 +72,7 @@ const App: React.FC = () => {
   // --- Handlers para abrir modales ---
   const handleScanRequest = useCallback(() => setModal(Screen.Scan), []);
   const handleInputCodeRequest = useCallback(() => setModal(Screen.InputCode), []);
-  
+
   const handleEditRequest = useCallback((item: Item) => {
     setItemToEdit(item);
     setModal(Screen.EditItem);
@@ -82,14 +82,14 @@ const App: React.FC = () => {
     setItemToView(item);
     setModal(Screen.ItemDetail);
   }, []);
-  
+
   // <<< NUEVO HANDLER PARA ACTIVAR ITEM >>>
   const handleActivateRequest = useCallback((item: Item) => {
     setItemToActivate(item);
     // FIX: Property 'Payment' does not exist on type 'typeof Screen'. Use 'PAYMENT_MODAL' instead.
     setModal(Screen.PAYMENT_MODAL);
   }, []);
-  
+
   // <<< NUEVO HANDLER PARA CIERRE DE PAGO >>>
   const handleActivationComplete = useCallback(() => {
     setItemToActivate(null);
@@ -102,7 +102,7 @@ const App: React.FC = () => {
 
     const isOwner = result.item.ownerId === user.uid;
     const status = result.status;
-    
+
     if (!isOwner && status === ItemStatus.EnRegla) {
       setItemToTransfer(result.item);
       setModal(Screen.REQUEST_TRANSFER);
@@ -116,7 +116,7 @@ const App: React.FC = () => {
     setGeneratedItem(result);
     setActiveScreen(Screen.GeneratedQR);
   };
-  
+
   const handleEditComplete = useCallback(() => {
     setItemToEdit(null);
     setModal(null);
@@ -155,8 +155,8 @@ const App: React.FC = () => {
     setIsMenuOpen(false);
   };
   const handleAppNavigate = (screen: Screen) => {
-     setPath('/');
-     setActiveScreen(screen);
+    setPath('/');
+    setActiveScreen(screen);
   };
 
   // --- Renders ---
@@ -164,14 +164,21 @@ const App: React.FC = () => {
     if (!user) return null;
 
     if (generatedItem) {
-      return <GeneratedQrScreen item={generatedItem} onDone={closeGeneratedQr} user={user}/>;
+      return <GeneratedQrScreen item={generatedItem} onDone={closeGeneratedQr} user={user} />;
     }
-    
+
     switch (activeScreen) {
       case Screen.Home:
         return <HomeScreen onScanRequest={handleScanRequest} onInputCodeRequest={handleInputCodeRequest} onNavigate={handleAppNavigate} onPublicNavigate={navigate} onMenuClick={toggleMenu} />;
       case Screen.Map:
-        return <MapScreen user={user} onMenuClick={toggleMenu} />;
+        return (
+          <MapScreen
+            user={user}
+            onMenuClick={toggleMenu}
+            onScanRequest={handleScanRequest}
+            onInputCodeRequest={handleInputCodeRequest}
+          />
+        );
       case Screen.Generate:
         return <GenerateScreen onGenerateComplete={handleGenerateComplete} user={user} onMenuClick={toggleMenu} />;
       case Screen.MyItems:
@@ -192,34 +199,34 @@ const App: React.FC = () => {
         return <InputCodeScreen onScanComplete={handleScanComplete} onCancel={closeModal} />;
       case Screen.ScanResult:
         return scanResult ? <ResultScreen result={scanResult} onClose={closeModal} /> : null;
-      
+
       case Screen.REQUEST_TRANSFER:
-        return itemToTransfer && user ? ( 
-          <RequestTransferScreen 
-            item={itemToTransfer} 
-            user={user} 
+        return itemToTransfer && user ? (
+          <RequestTransferScreen
+            item={itemToTransfer}
+            user={user}
             onCancel={closeModal}
             onRequestSent={closeModal}
           />
         ) : null;
-        
+
       case Screen.EditItem:
         return itemToEdit && user ? <EditItemScreen item={itemToEdit} user={user} onEditComplete={handleEditComplete} onCancel={closeModal} /> : null;
       case Screen.ItemDetail:
         return itemToView ? <ItemDetailScreen item={itemToView} onDone={closeModal} /> : null;
-      
+
       // <<< RENDER DEL MODAL DE PAGO >>>
       // FIX: Property 'Payment' does not exist on type 'typeof Screen'. Use 'PAYMENT_MODAL' instead.
       case Screen.PAYMENT_MODAL:
         return itemToActivate && user ? (
-            <PaymentScreen
-                item={itemToActivate}
-                user={user}
-                onActivationComplete={handleActivationComplete}
-                onCancel={closeModal}
-            />
+          <PaymentScreen
+            item={itemToActivate}
+            user={user}
+            onActivationComplete={handleActivationComplete}
+            onCancel={closeModal}
+          />
         ) : null;
-        
+
       default:
         return null;
     }
@@ -250,17 +257,17 @@ const App: React.FC = () => {
     }
     return (
       <>
-        <SideMenu 
-            isOpen={isMenuOpen}
-            onClose={() => setIsMenuOpen(false)}
-            onNavigate={handleMenuNavigate}
-            onScanRequest={handleMenuScanRequest}
-            onInputCodeRequest={handleMenuInputCodeRequest}
-            onPublicNavigate={handleMenuPublicNavigate}
+        <SideMenu
+          isOpen={isMenuOpen}
+          onClose={() => setIsMenuOpen(false)}
+          onNavigate={handleMenuNavigate}
+          onScanRequest={handleMenuScanRequest}
+          onInputCodeRequest={handleMenuInputCodeRequest}
+          onPublicNavigate={handleMenuPublicNavigate}
         />
         <div className="relative z-10 flex-shrink-0 bg-[#1e2a47] p-2 flex justify-between items-center text-white border-b border-blue-900">
-            <span className="text-xs truncate">{user.email}</span>
-            <button onClick={signOutUser} className="text-xs bg-red-600 px-3 py-1 rounded hover:bg-red-700 transition-colors">Salir</button>
+          <span className="text-xs truncate">{user.email}</span>
+          <button onClick={signOutUser} className="text-xs bg-red-600 px-3 py-1 rounded hover:bg-red-700 transition-colors">Salir</button>
         </div>
         <div className="flex-grow overflow-y-auto">
           {renderActiveScreen()}

@@ -1,0 +1,358 @@
+1. Por qué ves "Doble Cámara" y por qué no escanea
+El Problema Visual (Doble Cámara): El problema está en ScanScreen.tsx. Estás usando React (probablemente en modo estricto de desarrollo React.StrictMode), lo que hace que el componente se monte, se desmonte y se vuelva a montar muy rápido. La librería html5-qrcode inserta un elemento <video> en el DOM. Al montarse dos veces rápido, la librería crea dos instancias de video antes de que la primera se limpie correctamente.
+
+El Problema de Lectura (No escanea):
+
+La doble cámara: Al tener dos instancias de video peleando por el recurso de la cámara, el procesador de QR se confunde o se bloquea, impidiendo la lectura.
+
+La Cámara de Notebook: Como bien intuiste, las cámaras de notebook suelen tener foco fijo y baja resolución. Los códigos QR generados con nivel de corrección "H" (High, como está en tu código) son muy densos (muchos puntitos). Si la cámara no tiene autofocus, se ve borroso y no lee. Solución: Prueba con el celular o aleja/acerca el QR lentamente.
+
+2. Solución al Código (Scanner y Mapa)
+Vamos a arreglar tres archivos:
+
+ScanScreen.tsx: Para arreglar la doble cámara y mejorar la limpieza de memoria.
+
+MapScreen.tsx: Para mover el botón (que no tape el menú) y agregar el botón de "Ingreso Manual".
+
+App.tsx: Para conectar la lógica de ingreso manual al mapa.
+
+PASO 1: Arreglar el Escáner (ScanScreen.tsx)
+Este cambio asegura que se limpie el contenedor HTML antes de iniciar, evitando la doble imagen.
+
+
+TypeScript
+
+// Archivo: QR-escaneo/screens/ScanScreen.tsx
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { getItemByQrId } from '../services/itemService';
+import { Item, ItemStatus } from '../types';
+import Spinner from '../components/Spinner';
+
+interface ScanScreenProps {
+  onScanComplete: (result: { item: Item; status: ItemStatus }) => void;
+  onCancel: () => void;
+}
+
+const SCANNER_ELEMENT_ID = 'qr-reader';
+
+const ScanScreen: React.FC<ScanScreenProps> = ({ onScanComplete, onCancel }) => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+
+  useEffect(() => {
+    // 1. Limpieza preventiva por si React StrictMode renderiza doble
+    const element = document.getElementById(SCANNER_ELEMENT_ID);
+    if (element) element.innerHTML = "";
+
+    const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID);
+    scannerRef.current = scanner;
+
+    const config = { 
+      fps: 10, 
+      qrbox: { width: 250, height: 250 },
+      aspectRatio: 1.0,
+      formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
+    };
+
+    // Iniciamos el escáner
+    scanner.start(
+      { facingMode: "environment" }, 
+      config,
+      async (decodedText) => {
+        // --- LÓGICA DE ÉXITO ---
+        await scanner.stop(); // Detener cámara inmediatamente
+        scanner.clear();      // Limpiar UI
+        
+        setIsLoading(true);
+        setError(null);
+
+        try {
+          // Aquí se ejecuta la lógica que pediste: buscar el item
+          const result = await getItemByQrId(decodedText.trim());
+          if (result) {
+            onScanComplete(result); // Esto llevará a App.tsx que decide si es Transferencia o Reporte
+          } else {
+            setError('QR no encontrado en la base de datos.');
+            setIsLoading(false);
+          }
+        } catch (err) {
+          setError('No se pudo verificar el QR.');
+          setIsLoading(false);
+        }
+      },
+      (errorMessage) => {
+        // Error de lectura frame a frame, lo ignoramos para no saturar
+      }
+    ).catch(err => {
+      console.error("Error al iniciar cámara:", err);
+      setError("No se pudo acceder a la cámara. Verifique permisos.");
+    });
+
+    // Cleanup function: Se ejecuta al cerrar el componente
+    return () => {
+      if (scannerRef.current && scannerRef.current.isScanning) {
+        scannerRef.current.stop().then(() => scannerRef.current?.clear()).catch(console.error);
+      }
+    };
+  }, [onScanComplete]);
+
+  return (
+    <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-50 p-4">
+      <div className="w-full max-w-md bg-[#1e2a47] rounded-lg p-4 text-white text-center relative">
+        <h2 className="text-xl font-bold mb-4 text-yellow-400">ESCANEAR QR</h2>
+
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center h-[300px]">
+            <Spinner />
+            <p className="mt-4 text-yellow-400 animate-pulse">Verificando item...</p>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center h-[300px]">
+            <p className="text-red-500 mb-4 px-4">{error}</p>
+            <button onClick={onCancel} className="bg-gray-600 text-white py-2 px-6 rounded-lg">
+              Cerrar
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Contenedor del video */}
+            <div id={SCANNER_ELEMENT_ID} className="w-full overflow-hidden rounded-lg bg-black"></div>
+            <p className="mt-4 text-gray-400 text-xs">Apunta la cámara al código QR del item</p>
+            
+            <button
+              onClick={onCancel}
+              className="mt-4 w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-bold"
+            >
+              CANCELAR
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ScanScreen;
+PASO 2: Mejorar el Mapa (MapScreen.tsx)
+Aquí hacemos 3 cosas:
+
+Subimos los botones para que no los tape el menú inferior (cambiamos bottom-6 por bottom-24).
+
+Agregamos el botón de "Teclado" para ingreso manual.
+
+Recibimos la prop onInputCodeRequest.
+
+TypeScript
+
+// Archivo: QR-escaneo/screens/MapScreen.tsx
+
+import React, { useState, useEffect } from 'react';
+import { User } from 'firebase/auth';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import { Item, ItemStatus, PaymentStatus } from '../types';
+import { getAllUserItems, getPublicReportedItems } from '../services/itemService';
+import Header from '../components/Header';
+importQl from '../components/Spinner';
+import Spinner from '../components/Spinner';
+
+// ... (Mantén los iconos iconReported y iconMyItem igual que antes) ...
+const iconReported = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const iconMyItem = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+interface MapScreenProps {
+  user: User;
+  onMenuClick: () => void;
+  onScanRequest: () => void;
+  onInputCodeRequest: () => void; // <<< NUEVA PROP
+}
+
+const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest, onInputCodeRequest }) => {
+  const [items, setItems] = useState<Item[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const defaultPosition: [number, number] = [-27.3670, -55.8961]; 
+
+  useEffect(() => {
+    const fetchMapData = async () => {
+      setIsLoading(true);
+      try {
+        const userItems = await getAllUserItems(user.uid);
+        const reportedItems = await getPublicReportedItems();
+        const allItemsMap = new Map<string, Item>();
+
+        const addItemToMap = (item: Item) => {
+          if (item.qrId && (item.location || item.recoveryLocation) && item.paymentStatus !== PaymentStatus.Pending) {
+            allItemsMap.set(item.qrId, item);
+          }
+        };
+        userItems.forEach(addItemToMap);
+        reportedItems.forEach(addItemToMap);
+        setItems(Array.from(allItemsMap.values()));
+
+      } catch (err) {
+        setError("Error cargando mapa.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchMapData();
+  }, [user.uid]);
+
+  const renderMarkers = () => {
+     // ... (Mantén la lógica de renderMarkers igual) ...
+     return items.map(item => {
+      const location = item.recoveryLocation || item.location;
+      if (!location || !item.qrId) return null;
+      const isOwner = item.ownerId === user.uid;
+      const isReported = item.status === ItemStatus.Denunciado;
+      let markerIcon = iconMyItem;
+      if (isReported) markerIcon = iconReported;
+
+      return (
+        <Marker
+          key={item.qrId}
+          position={[location.lat, location.lng]}
+          icon={markerIcon}
+        >
+          <Popup>
+            <div className="text-sm">
+              <p className="font-bold">{item.marca} {item.modelo}</p>
+              <p>{item.tipo}</p>
+              <p className={`font-bold ${isReported ? 'text-red-600' : 'text-blue-600'}`}>
+                {item.status?.replace('_', ' ')}
+              </p>
+            </div>
+          </Popup>
+        </Marker>
+      );
+    });
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-[#0d1226]">
+      <Header title="MAPA DE ITEMS" onMenuClick={onMenuClick} />
+
+      <div className="flex-grow relative overflow-hidden z-0">
+        {isLoading ? (
+          <div className="flex justify-center items-center h-full"><Spinner /></div>
+        ) : (
+          <MapContainer center={defaultPosition} zoom={13} style={{ height: '100%', width: '100%' }}>
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='&copy; OpenStreetMap'
+            />
+            {renderMarkers()}
+          </MapContainer>
+        )}
+
+        {/* --- BOTONES FLOTANTES CORREGIDOS --- */}
+        {/* Usamos bottom-24 (aprox 96px) para que quede ARRIBA del BottomNavBar (que suele medir 80px) */}
+        <div className="absolute bottom-24 right-4 flex flex-col space-y-4 z-[400]">
+          
+          {/* Botón 1: Ingreso Manual */}
+          <button
+            onClick={onInputCodeRequest}
+            className="bg-gray-700 text-white p-4 rounded-full shadow-lg hover:bg-gray-600 transition-colors border border-gray-500"
+            aria-label="Ingresar Código Manualmente"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+            </svg>
+          </button>
+
+          {/* Botón 2: Escáner (Amarillo) */}
+          <button
+            onClick={onScanRequest}
+            className="bg-yellow-500 text-black p-4 rounded-full shadow-lg hover:bg-yellow-400 transition-colors border-2 border-black"
+            aria-label="Escanear QR"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+export default MapScreen;
+PASO 3: Conectar todo en App.tsx
+Necesitamos pasar la función handleInputCodeRequest al componente MapScreen.
+
+TypeScript
+
+// En App.tsx, busca la sección renderActiveScreen y modifícala así:
+
+  const renderActiveScreen = () => {
+    if (!user) return null;
+
+    if (generatedItem) {
+      return <GeneratedQrScreen item={generatedItem} onDone={closeGeneratedQr} user={user}/>;
+    }
+    
+    switch (activeScreen) {
+      case Screen.Home:
+        return <HomeScreen onScanRequest={handleScanRequest} onInputCodeRequest={handleInputCodeRequest} onNavigate={handleAppNavigate} onPublicNavigate={navigate} onMenuClick={toggleMenu} />;
+      
+      case Screen.Map:
+        // <<< AQUÍ AGREGAMOS onInputCodeRequest >>>
+        return (
+          <MapScreen 
+            user={user} 
+            onMenuClick={toggleMenu} 
+            onScanRequest={handleScanRequest} 
+            onInputCodeRequest={handleInputCodeRequest} 
+          />
+        );
+        
+      case Screen.Generate:
+        return <GenerateScreen onGenerateComplete={handleGenerateComplete} user={user} onMenuClick={toggleMenu} />;
+      case Screen.MyItems:
+        return <MyItemsScreen key={myItemsKey} user={user} onMenuClick={toggleMenu} onEditRequest={handleEditRequest} onViewRequest={handleViewRequest} onActivateRequest={handleActivateRequest} />;
+      case Screen.TRANSFERS:
+        return <TransfersScreen user={user} onMenuClick={toggleMenu} />;
+      default:
+        return <HomeScreen onScanRequest={handleScanRequest} onInputCodeRequest={handleInputCodeRequest} onNavigate={handleAppNavigate} onPublicNavigate={navigate} onMenuClick={toggleMenu} />;
+    }
+  };
+Resumen de la Lógica
+Escaneo:
+
+Cuando el escáner lee (o ingresas el código manual), llama a onScanComplete.
+
+En App.tsx, handleScanComplete hace esto:
+
+Si el item es tuyo -> Muestra detalle (ResultScreen).
+
+Si el item NO es tuyo -> Abre Screen.REQUEST_TRANSFER. Esto cumple tu requerimiento de "funcionalidad de vender".
+
+Si el item está denunciado -> ResultScreen muestra un cartel rojo gigante de "ROBADO".
+
+Cámara Notebook:
+
+Es muy probable que la cámara de la PC no pueda enfocar el QR de cerca. Prueba generando el QR en el celular y mostrándolo a la PC un poco más lejos, o viceversa.
+
+Si funciona en el celular pero no en la PC, el código está bien, es solo limitación de hardware de la cámara web.
