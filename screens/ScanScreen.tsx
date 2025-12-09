@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { getItemByQrId } from '../services/itemService';
+import { getItemByShortId, updateItemStatus } from '../services/itemService';
 import { Item, ItemStatus } from '../types';
 import Spinner from '../components/Spinner';
 
@@ -9,37 +9,68 @@ interface ScanScreenProps {
   onCancel: () => void;
 }
 
-const SCANNER_ELEMENT_ID = 'qr-reader';
+const SCANNER_ELEMENT_ID = 'qr-reader-direct';
 
 const ScanScreen: React.FC<ScanScreenProps> = ({ onScanComplete, onCancel }) => {
-  const [isLoading, setIsLoading] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<string>('Iniciando cámara...');
+  const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Usamos useRef para mantener el control del escáner sin causar re-renderizados
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isMountedRef = useRef(true);
+  const isStoppingRef = useRef(false); // Flag para evitar múltiples llamadas a stop()
+
+  // Helper para obtener GPS (copiado de versión anterior, mantienedo funcionalidad)
+  const getCollaborativeLocation = (): Promise<{ lat: number, lng: number }> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject("No GPS");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (err) => reject(err),
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
+    });
+  };
+
+  // Función SAFE STOP: Intenta detener el escáner sin explotar
+  const safeStopScanner = async () => {
+    if (isStoppingRef.current || !scannerRef.current) return;
+
+    isStoppingRef.current = true;
+    try {
+      // Solo intentamos parar si el escáner cree que está corriendo
+      if (scannerRef.current.isScanning) {
+        await scannerRef.current.stop();
+      }
+      scannerRef.current.clear();
+    } catch (err) {
+      console.warn("Error seguro al detener escáner (ignorable):", err);
+    } finally {
+      isStoppingRef.current = false;
+    }
+  };
 
   useEffect(() => {
     isMountedRef.current = true;
+    isStoppingRef.current = false;
 
-    // Función para iniciar el escáner
-    const initializeScanner = async () => {
-      // 1. LIMPIEZA PREVIA: Vaciamos el div a la fuerza.
-      // Esto elimina cualquier video "fantasma" que haya quedado de un renderizado anterior.
-      const element = document.getElementById(SCANNER_ELEMENT_ID);
-      if (element) {
-        element.innerHTML = "";
+    const startCamera = async () => {
+      // 1. Instanciación ÚNICA
+      if (!scannerRef.current) {
+        scannerRef.current = new Html5Qrcode(SCANNER_ELEMENT_ID, {
+          verbose: false,
+          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+        });
       }
 
-      // 2. Instanciamos la librería con configuración de formatos
-      const html5QrCode = new Html5Qrcode(SCANNER_ELEMENT_ID, {
-        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-        verbose: false
-      });
-      scannerRef.current = html5QrCode;
-
       try {
-        await html5QrCode.start(
+        // Doble check por si se desmontó mientras cargaba
+        if (!isMountedRef.current) return;
+
+        await scannerRef.current.start(
           { facingMode: "environment" },
           {
             fps: 10,
@@ -47,105 +78,137 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onScanComplete, onCancel }) => 
             aspectRatio: 1.0
           },
           async (decodedText) => {
-            // --- ÉXITO AL LEER ---
-            // Detenemos la cámara inmediatamente para evitar múltiples lecturas
-            if (scannerRef.current) {
-              await scannerRef.current.stop().catch(err => console.warn("Stop error:", err));
-              scannerRef.current.clear();
-            }
+            // --- DETECCIÓN ---
+            if (!isMountedRef.current || isProcessing) return;
 
-            if (!isMountedRef.current) return;
+            // IMPORTANTE: Pausar video inmediatamente para 'congelar' la imagen y evitar redetecciones
+            // No hacemos stop() todavía para evitar flasheos o errores de estado
+            try {
+              scannerRef.current?.pause(true);
+            } catch (e) { /* Ignorar si ya estaba pausado */ }
 
-            setIsLoading(true);
-            setError(null);
+            setIsProcessing(true);
+            setStatusMsg('Código detectado. Verificando...');
 
             try {
-              // Buscamos el item en la base de datos
-              const result = await getItemByQrId(decodedText.trim());
+              // 1. Lógica de limpieza de URL
+              let shortId = decodedText;
+              if (decodedText.includes('/ver/')) {
+                const parts = decodedText.split('/ver/');
+                shortId = parts[1].replace('/', '');
+              }
 
-              if (!isMountedRef.current) return;
+              // 2. Consulta DB
+              const result = await getItemByShortId(shortId.trim());
 
-              if (result) {
-                onScanComplete(result);
+              if (result) { // Item encontrado
+
+                // --- RASTREO COLABORATIVO ---
+                if (result.status === ItemStatus.Denunciado) {
+                  setStatusMsg('⚠️ ¡ARTÍCULO DENUNCIADO! ⚠️\nEnviando ubicación segura...');
+                  try {
+                    const location = await getCollaborativeLocation();
+                    await updateItemStatus(result.item.qrId!, "public", ItemStatus.Denunciado, location);
+                    alert("¡GRACIAS! 🛡️\n\nEste artículo fue reportado como robado.\nTu escaneo ha enviado la ubicación actual al dueño.");
+                  } catch (gpsError) {
+                    console.warn("GPS error:", gpsError);
+                  }
+                }
+
+                // SI TODO SALIÓ BIEN, AHORA SÍ DETENEMOS Y NAVEGAMOS
+                if (isMountedRef.current) {
+                  await safeStopScanner();
+                  onScanComplete(result);
+                }
+
               } else {
-                setError('QR no encontrado en la base de datos.');
-                setIsLoading(false);
+                throw new Error("Código no registrado.");
               }
-            } catch (err) {
-              if (isMountedRef.current) {
-                console.error("Error verificando QR:", err);
-                setError('No se pudo verificar el QR.');
-                setIsLoading(false);
-              }
+
+            } catch (err: any) {
+              console.error(err);
+              setError(err.message || "Código inválido");
+
+              // Si falló, reanudamos el escáner después de un delay
+              setTimeout(() => {
+                if (isMountedRef.current) {
+                  setIsProcessing(false);
+                  setError(null);
+                  setStatusMsg('Escaneando...');
+                  try {
+                    scannerRef.current?.resume();
+                  } catch (resumeError) {
+                    console.warn("Error resuming:", resumeError);
+                    // Si no puede reanudar, quizás convenga reiniciar, pero resume suele ser seguro
+                  }
+                }
+              }, 2000);
             }
           },
-          () => {
-            // Ignoramos errores de lectura frame a frame
-          }
+          (errorMessage) => { /* Ignorar errores de frame vacío */ }
         );
-      } catch (err) {
+
         if (isMountedRef.current) {
-          console.error("Error iniciando cámara:", err);
-          setError("No se pudo acceder a la cámara. Verifique permisos.");
+          setStatusMsg('Escaneando...');
+        } else {
+          // Si se desmontó justo después de start, paramos.
+          safeStopScanner();
+        }
+
+      } catch (err) {
+        console.error("Start camera error:", err);
+        if (isMountedRef.current) {
+          setError("No se pudo acceder a la cámara.");
         }
       }
     };
 
-    // 3. PEQUEÑO RETRASO: Esperamos 100ms antes de iniciar. 
-    // Esto es vital en React para asegurar que el DOM esté listo y limpio.
-    const timerId = setTimeout(() => {
-      initializeScanner();
-    }, 100);
+    // Delay inicial para asegurar montaje DOM
+    const timer = setTimeout(startCamera, 100);
 
-    // 4. CLEANUP: Se ejecuta al cerrar el modal
     return () => {
       isMountedRef.current = false;
-      clearTimeout(timerId);
-
-      if (scannerRef.current) {
-        // Intentamos detener y limpiar, capturando errores por si ya estaba detenido
-        scannerRef.current.stop().then(() => {
-          scannerRef.current?.clear();
-        }).catch(err => {
-          console.warn("Error cleaning up scanner:", err);
-        });
-      }
+      clearTimeout(timer);
+      // Limpieza robusta al desmontar
+      safeStopScanner();
     };
-  }, [onScanComplete]);
+  }, [onScanComplete]); // Dependencias vacías o estables idealmente, pero onScanComplete suele ser prop
 
   return (
-    <div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-50 p-4">
-      <div className="w-full max-w-md bg-[#1e2a47] rounded-lg p-4 text-white text-center relative shadow-2xl">
-        <h2 className="text-xl font-bold mb-4 text-yellow-400">ESCANEAR QR</h2>
-
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center h-[300px]">
-            <Spinner />
-            <p className="mt-4 text-yellow-400 animate-pulse">Verificando item...</p>
+    <div className="absolute inset-0 bg-black z-50 flex flex-col">
+      <div id={SCANNER_ELEMENT_ID} className="flex-grow w-full bg-black relative">
+        <div className="absolute inset-0 border-[50px] border-black/60 z-10 pointer-events-none flex items-center justify-center">
+          <div className="w-64 h-64 border-2 border-yellow-400 relative opacity-80 animate-pulse">
+            <div className="absolute top-0 left-0 w-4 h-4 border-l-4 border-t-4 border-yellow-400 -mt-1 -ml-1"></div>
+            <div className="absolute top-0 right-0 w-4 h-4 border-r-4 border-t-4 border-yellow-400 -mt-1 -mr-1"></div>
+            <div className="absolute bottom-0 left-0 w-4 h-4 border-l-4 border-b-4 border-yellow-400 -mb-1 -ml-1"></div>
+            <div className="absolute bottom-0 right-0 w-4 h-4 border-r-4 border-b-4 border-yellow-400 -mb-1 -mr-1"></div>
           </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center h-[300px]">
-            <p className="text-red-500 mb-6 px-4 font-semibold">{error}</p>
-            <button onClick={onCancel} className="bg-gray-600 hover:bg-gray-500 text-white py-2 px-8 rounded-lg transition-colors">
-              Cerrar
-            </button>
+        </div>
+      </div>
+
+      <div className="bg-[#1e2a47] p-6 rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.5)] relative z-20">
+        <div className="w-12 h-1 bg-gray-600 rounded-full mx-auto mb-4"></div>
+
+        {error ? (
+          <div className="text-center">
+            <p className="text-red-500 font-bold mb-2">Error</p>
+            <p className="text-sm text-gray-300 mb-4">{error}</p>
+            <button onClick={onCancel} className="bg-gray-600 w-full py-3 rounded-xl font-bold text-white">Cerrar</button>
           </div>
         ) : (
-          <>
-            {/* Contenedor del video */}
-            <div id={SCANNER_ELEMENT_ID} className="w-full overflow-hidden rounded-lg bg-black border-2 border-gray-700 min-h-[250px]"></div>
+          <div className="text-center">
+            <h3 className="text-xl font-bold text-white mb-1">{isProcessing ? 'Procesando...' : 'Escáner Activo'}</h3>
+            <p className="text-sm text-yellow-400 mb-6 whitespace-pre-wrap">{statusMsg}</p>
 
-            <p className="mt-4 text-gray-400 text-xs">
-              Apunta la cámara al código. Si no enfoca, aleja un poco el dispositivo.
-            </p>
-
-            <button
-              onClick={onCancel}
-              className="mt-6 w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-bold transition-colors"
-            >
-              CANCELAR
-            </button>
-          </>
+            {isProcessing ? (
+              <div className="flex justify-center"><Spinner /></div>
+            ) : (
+              <button onClick={onCancel} className="bg-red-600/90 hover:bg-red-600 text-white w-full py-3 rounded-xl font-bold transition-all active:scale-95 shadow-lg border border-red-500/50">
+                DETENER ESCANEO
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

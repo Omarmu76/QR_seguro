@@ -1,10 +1,7 @@
-// Archivo: screens/RequestTransferScreen.tsx
-// (Pantalla del Comprador)
-
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { User } from 'firebase/auth';
-import { Item, TransferRequest, TransferStatus } from '../types'; // <<< Importamos TransferRequest y TransferStatus
-import { createTransferRequest, getTransferRequestByItem } from '../services/itemService'; // <<< Actualizamos funciones
+import { Item, TransferRequest, TransferStatus } from '../types';
+import { createTransferRequest } from '../services/itemService';
 import Spinner from '../components/Spinner';
 
 interface RequestTransferScreenProps {
@@ -16,117 +13,86 @@ interface RequestTransferScreenProps {
 
 const RequestTransferScreen: React.FC<RequestTransferScreenProps> = ({ item, user, onCancel, onRequestSent }) => {
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [existingRequest, setExistingRequest] = useState<TransferRequest | null>(null);
-  const [isChecking, setIsChecking] = useState(true); // Para verificar si ya hay una solicitud
-
-  // Al abrir el modal, verificamos si ya existe una solicitud para este item
-  useEffect(() => {
-    if (!item.qrId || !user.uid) {
-      setIsChecking(false);
-      return;
-    };
-    
-    // Usamos la nueva función del servicio
-    getTransferRequestByItem(item.qrId, user.uid)
-      .then(request => {
-        setExistingRequest(request); // Guardamos la solicitud si existe
-      })
-      .catch((err) => setError("Error al verificar solicitud existente."))
-      .finally(() => setIsChecking(false));
-  }, [item.qrId, user.uid]);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   const handleRequest = async () => {
     setIsLoading(true);
-    setError('');
+    setError(null);
     try {
-      // Usamos la nueva función del servicio
-      const newRequest = await createTransferRequest(item, user);
-      setExistingRequest(newRequest); // Actualizamos la UI para mostrar que está pendiente
+      await createTransferRequest(item, user);
+      setSuccess(true);
+      // Esperamos un poco para que el usuario lea el mensaje de éxito
+      setTimeout(() => {
+        onRequestSent();
+      }, 2000);
     } catch (err: any) {
-      setError(err.message || 'Ocurrió un error al enviar la solicitud.');
-    } finally {
+      console.error(err);
+      setError(err.message || "Error al solicitar la transferencia.");
       setIsLoading(false);
     }
   };
 
-  // Esta función decide qué mostrar:
-  // 1. Cargando (verificando)
-  // 2. Ya existe una solicitud (pendiente o aprobada)
-  // 3. Botón para crear la solicitud
-  const renderContent = () => {
-    if (isChecking) {
-      return (
-        <div className="flex justify-center items-center h-24">
-          <Spinner />
-        </div>
-      );
-    }
-    
-    if (existingRequest) {
-      // El usuario YA hizo una solicitud para este item
-      let statusMessage = 'Solicitud Enviada';
-      if(existingRequest.status === TransferStatus.Approved) statusMessage = 'Solicitud Aprobada';
-      if(existingRequest.status === TransferStatus.Rejected) statusMessage = 'Solicitud Rechazada';
-
-      return (
-        <div className="text-center">
-          <p className={`text-lg ${existingRequest.status === TransferStatus.Approved ? 'text-green-400' : existingRequest.status === TransferStatus.Rejected ? 'text-red-400' : 'text-yellow-400'} font-bold mb-4`}>
-            {statusMessage}
-          </p>
-          <p className="text-gray-300 text-sm">
-            {existingRequest.status === TransferStatus.Pending && "El vendedor ha sido notificado. Verás el item en 'Mis Items' cuando la apruebe."}
-            {existingRequest.status === TransferStatus.Approved && "¡Transferencia completada! Revisa 'Mis Items'."}
-            {existingRequest.status === TransferStatus.Rejected && "El vendedor ha rechazado esta solicitud."}
-          </p>
-          <button
-            onClick={onRequestSent} // Cierra el modal
-            className="w-full bg-blue-600 text-white py-3 rounded-lg text-lg font-bold hover:bg-blue-700 transition-colors mt-6"
-          >
-            Entendido
-          </button>
-        </div>
-      );
-    }
-
-    // El usuario NO ha hecho una solicitud. Mostramos el botón para solicitar.
+  if (success) {
     return (
-      <>
-        {error && <p className="text-red-500 text-center text-sm mb-4">{error}</p>}
-        <div className="space-y-3">
+      <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-50 p-6 text-center">
+        <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mb-4">
+          <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">¡Solicitud Enviada!</h2>
+        <p className="text-gray-300">El dueño recibirá tu petición.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-50 p-4 animate-fade-in">
+      <div className="w-full max-w-md bg-[#1e2a47] rounded-xl p-6 text-white border border-gray-700 shadow-2xl relative">
+
+        {/* Header */}
+        <div className="text-center mb-6">
+          <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg shadow-blue-900/50">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+          </div>
+          <h2 className="text-xl font-bold">Solicitar Transferencia</h2>
+          <p className="text-sm text-gray-400 mt-1">Este artículo pertenece a otro usuario.</p>
+        </div>
+
+        {/* Info del Item */}
+        <div className="bg-black/30 p-4 rounded-lg mb-6 border border-white/5">
+          <p className="text-xs text-blue-400 font-bold uppercase tracking-wider mb-1">{item.tipo}</p>
+          <h3 className="text-lg font-bold text-white">{item.marca} {item.modelo}</h3>
+          <p className="text-sm text-gray-400 mt-1">ID Visible: <span className="font-mono text-white">{item.shortId || item.identificador}</span></p>
+        </div>
+
+        {error && (
+          <div className="bg-red-500/20 border border-red-500/50 p-3 rounded-lg mb-4 text-red-200 text-sm text-center">
+            {error}
+          </div>
+        )}
+
+        {/* Acciones */}
+        <div className="flex flex-col gap-3">
           <button
             onClick={handleRequest}
             disabled={isLoading}
-            className="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg font-semibold transition-colors flex justify-center items-center"
+            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg shadow-lg transition-all active:scale-[0.98] flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? <Spinner /> : 'Confirmar Solicitud'}
+            {isLoading ? <Spinner /> : "SOLICITAR PROPIEDAD"}
           </button>
+
           <button
             onClick={onCancel}
             disabled={isLoading}
-            className="w-full bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-lg font-semibold transition-colors"
+            className="w-full bg-transparent border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 font-bold py-3 rounded-lg transition-colors"
           >
             Cancelar
           </button>
         </div>
-      </>
-    );
-  };
 
-  return (
-    <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="w-full max-w-sm bg-[#1e2a47] rounded-lg shadow-2xl p-6 text-white">
-        <h2 className="text-2xl font-bold mb-4 text-center text-yellow-400">Solicitar Transferencia</h2>
-        <p className="text-center text-gray-300 mb-6">Estás a punto de solicitar la propiedad de este item.</p>
-        
-        <div className="bg-gray-800/80 p-4 rounded-lg space-y-2 mb-6">
-          <p><span className="font-semibold text-gray-400">Tipo:</span> {item.tipo}</p>
-          <p><span className="font-semibold text-gray-400">Marca:</span> {item.marca}</p>
-          <p><span className="font-semibold text-gray-400">Modelo:</span> {item.modelo}</p>
-          <p><span className="font-semibold text-gray-400">ID:</span> {item.identificador}</p>
-        </div>
-        
-        {renderContent()}
+        <p className="text-[10px] text-gray-500 text-center mt-4 px-4">
+          Al solicitar, el dueño actual deberá aprobar la transferencia desde su panel.
+        </p>
       </div>
     </div>
   );

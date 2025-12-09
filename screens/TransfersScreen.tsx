@@ -1,138 +1,199 @@
-// Archivo: screens/TransfersScreen.tsx
-// (Pantalla del Vendedor)
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User } from 'firebase/auth';
-import Header from '../components/Header';
-import { TransferRequest } from '../types'; // <<< Usamos la interfaz
-import { getPendingTransfers, approveTransfer, rejectTransfer } from '../services/itemService';
+import { TransferRequest, TransferStatus } from '../types';
+import { getPendingTransfers, getSentTransfers, approveTransfer, rejectTransfer, cancelTransfer } from '../services/itemService';
 import Spinner from '../components/Spinner';
 
 interface TransfersScreenProps {
   user: User;
   onMenuClick: () => void;
+  // Nuevas props para iniciar transferencia desde aquí
+  onScanRequest: () => void;
+  onInputCodeRequest: () => void;
 }
 
-// (Componente interno para la tarjeta de solicitud)
-const TransferCard: React.FC<{ req: TransferRequest; onApprove: () => void; onReject: () => void; }> = ({ req, onApprove, onReject }) => {
-  return (
-    <div className="p-4 rounded-lg bg-gray-800/80 text-white space-y-3">
-      <p className="font-bold text-lg">{req.itemDetails.marca} {req.itemDetails.modelo}</p>
-      <p className="text-sm text-gray-300">Tipo: {req.itemDetails.tipo} - ID: {req.itemDetails.identificador}</p>
-      <p className="text-sm text-yellow-400">Solicitado por: {req.buyerEmail}</p>
-      <p className="text-xs text-gray-500">Fecha: {new Date(req.createdAt).toLocaleString()}</p>
-      
-      <p className="text-sm text-center pt-3 border-t border-gray-700">
-        Confirme que ha recibido el pago por fuera de la app antes de aprobar.
-      </p>
-      
-      <div className="flex space-x-3 pt-2">
-        <button
-          onClick={onReject}
-          className="w-1/2 bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-lg font-semibold transition-colors"
-        >
-          Rechazar
-        </button>
-        <button
-          onClick={onApprove}
-          className="w-1/2 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg font-semibold transition-colors"
-        >
-          Aprobar
-        </button>
-      </div>
-    </div>
-  );
-};
+const TransfersScreen: React.FC<TransfersScreenProps> = ({ user, onMenuClick, onScanRequest, onInputCodeRequest }) => {
+  const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
+  const [receivedRequests, setReceivedRequests] = useState<TransferRequest[]>([]);
+  const [sentRequests, setSentRequests] = useState<TransferRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
-
-const TransfersScreen: React.FC<TransfersScreenProps> = ({ user, onMenuClick }) => {
-  const [pendingTransfers, setPendingTransfers] = useState<TransferRequest[]>([]); // <<< Usamos la interfaz
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [loadingAction, setLoadingAction] = useState<string | null>(null); // Para spinners en botones
-
-  // Función de carga (ahora real)
-  const fetchTransfers = useCallback(async () => {
-    if (!user) return;
-    setIsLoading(true);
-    setError(null);
+  const fetchRequests = useCallback(async () => {
+    setLoading(true);
     try {
-      const transfers = await getPendingTransfers(user.uid);
-      setPendingTransfers(transfers);
-    } catch (err) {
-      setError("No se pudieron cargar las transferencias pendientes.");
+      const [rec, sent] = await Promise.all([
+        getPendingTransfers(user.uid),
+        getSentTransfers(user.uid)
+      ]);
+      setReceivedRequests(rec);
+      setSentRequests(sent);
+    } catch (error) {
+      console.error("Error cargando transferencias:", error);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, [user]);
+  }, [user.uid]);
 
   useEffect(() => {
-    fetchTransfers();
-  }, [fetchTransfers]);
-  
-  const handleApprove = async (request: TransferRequest) => {
-    if (!request.id) return;
-    setLoadingAction(request.id);
+    fetchRequests();
+  }, [fetchRequests]);
+
+  const handleApprove = async (req: TransferRequest) => {
+    if (!window.confirm("¿Confirmas que recibiste el pago y deseas transferir la propiedad? Esta acción es irreversible.")) return;
+    setProcessingId(req.id);
     try {
-      await approveTransfer(request.id, request.itemId, request.buyerId);
-      fetchTransfers(); // Recarga la lista
-    } catch (err) {
-      setError("Error al aprobar la transferencia.");
+      await approveTransfer(req.id, req.itemId, req.buyerId);
+      await fetchRequests();
+      alert("¡Transferencia exitosa! El ítem ya no te pertenece.");
+    } catch (e) {
+      alert("Error al aprobar transferencia.");
     } finally {
-      setLoadingAction(null);
+      setProcessingId(null);
     }
   };
 
-  const handleReject = async (request: TransferRequest) => {
-    if (!request.id) return;
-    setLoadingAction(request.id);
+  const handleReject = async (id: string) => {
+    if (!window.confirm("¿Rechazar solicitud?")) return;
+    setProcessingId(id);
     try {
-      await rejectTransfer(request.id);
-      fetchTransfers(); // Recarga la lista
-    } catch (err) {
-      setError("Error al rechazar la transferencia.");
+      await rejectTransfer(id);
+      await fetchRequests();
+    } catch (e) {
+      alert("Error al rechazar.");
     } finally {
-      setLoadingAction(null);
+      setProcessingId(null);
+    }
+  };
+
+  const handleCancel = async (id: string) => {
+    if (!window.confirm("¿Cancelar esta solicitud?")) return;
+    setProcessingId(id);
+    try {
+      await cancelTransfer(id);
+      await fetchRequests();
+    } catch (e) {
+      alert("Error al cancelar.");
+    } finally {
+      setProcessingId(null);
     }
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0d1226]">
-      <Header title="TRANSFERENCIAS" onMenuClick={onMenuClick} />
-      <div className="flex-grow p-4 overflow-y-auto">
-        {error && <p className="text-red-500 text-center mb-4">{error}</p>}
-        {isLoading ? (
-          <div className="flex justify-center items-center h-full">
-            <Spinner />
-          </div>
-        ) : (
-          <div className="space-y-3">
-             <p className="text-center text-gray-400 mb-4 text-sm">
-                Aquí verás las solicitudes de transferencia pendientes de tu aprobación.
-            </p>
-            
-            {pendingTransfers.length === 0 ? (
-              <div className="p-4 rounded-lg bg-gray-800/80 text-white text-center">
-                <p>No tienes solicitudes de transferencia pendientes.</p>
-              </div>
-            ) : (
-              pendingTransfers.map(req => (
-                <div key={req.id}>
-                  {loadingAction === req.id ? (
-                    <div className="p-4 rounded-lg bg-gray-800/80 flex justify-center items-center h-[250px]">
-                      <Spinner />
+    <div className="flex flex-col h-full bg-[#0d1226] text-white">
+      {/* HEADER */}
+      <div className="bg-[#1e2a47] p-4 flex justify-between items-center shadow-md">
+        <button onClick={onMenuClick} className="p-2">
+          <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+        <h1 className="text-lg font-bold uppercase tracking-wider text-yellow-400">Transferencias</h1>
+        <div className="w-8"></div>
+      </div>
+
+      {/* BOTÓN DE ACCIÓN RÁPIDA (COMPRAR) */}
+      <div className="p-4 bg-gradient-to-r from-blue-900 to-[#0d1226] border-b border-gray-700">
+        <h3 className="text-sm text-gray-400 mb-2 uppercase font-bold text-center">¿Quieres recibir/comprar un artículo?</h3>
+        <div className="flex gap-3">
+          <button onClick={onScanRequest} className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+            ESCANEAR QR
+          </button>
+          <button onClick={onInputCodeRequest} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors">
+            ABC-123
+          </button>
+        </div>
+      </div>
+
+      {/* TABS */}
+      <div className="flex border-b border-gray-700">
+        <button
+          onClick={() => setActiveTab('received')}
+          className={`flex-1 py-3 font-bold text-sm ${activeTab === 'received' ? 'text-yellow-400 border-b-2 border-yellow-400 bg-white/5' : 'text-gray-400'}`}
+        >
+          RECIBIDAS ({receivedRequests.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('sent')}
+          className={`flex-1 py-3 font-bold text-sm ${activeTab === 'sent' ? 'text-blue-400 border-b-2 border-blue-400 bg-white/5' : 'text-gray-400'}`}
+        >
+          ENVIADAS ({sentRequests.length})
+        </button>
+      </div>
+
+      {/* LISTA */}
+      <div className="flex-grow overflow-y-auto p-4">
+        {loading ? (
+          <div className="flex justify-center mt-10"><Spinner /></div>
+        ) : activeTab === 'received' ? (
+          // LISTA DE VENDEDOR
+          receivedRequests.length === 0 ? (
+            <p className="text-center text-gray-500 mt-10">No tienes solicitudes pendientes.</p>
+          ) : (
+            <div className="space-y-4">
+              {receivedRequests.map(req => (
+                <div key={req.id} className="bg-[#1e2a47] p-4 rounded-xl border border-gray-700">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="font-bold text-white text-lg">{req.itemDetails.marca} {req.itemDetails.modelo}</p>
+                      <p className="text-xs text-blue-300">{req.itemDetails.tipo}</p>
                     </div>
-                  ) : (
-                    <TransferCard 
-                      req={req}
-                      onApprove={() => handleApprove(req)}
-                      onReject={() => handleReject(req)}
-                    />
+                    <span className="bg-yellow-500/20 text-yellow-400 text-xs px-2 py-1 rounded">PENDIENTE</span>
+                  </div>
+                  <p className="text-sm text-gray-300 mb-4">
+                    Comprador: <span className="text-white font-bold">{req.buyerEmail}</span>
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleApprove(req)}
+                      disabled={!!processingId}
+                      className="flex-1 bg-green-600 hover:bg-green-500 text-white py-2 rounded-lg font-bold text-sm transition-colors"
+                    >
+                      {processingId === req.id ? '...' : '✅ CONFIRMAR PAGO'}
+                    </button>
+                    <button
+                      onClick={() => handleReject(req.id)}
+                      disabled={!!processingId}
+                      className="px-4 bg-red-900/50 text-red-400 border border-red-900 rounded-lg font-bold text-sm hover:bg-red-900/80"
+                    >
+                      RECHAZAR
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : (
+          // LISTA DE COMPRADOR
+          sentRequests.length === 0 ? (
+            <p className="text-center text-gray-500 mt-10">No has enviado solicitudes.</p>
+          ) : (
+            <div className="space-y-4">
+              {sentRequests.map(req => (
+                <div key={req.id} className="bg-[#1e2a47] p-4 rounded-xl border border-gray-700 opacity-80">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="font-bold text-white">{req.itemDetails.marca} {req.itemDetails.modelo}</p>
+                      <p className="text-xs text-gray-400">Solicitado el: {new Date(req.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded font-bold 
+                                    ${req.status === TransferStatus.Pending ? 'bg-yellow-500/20 text-yellow-400' :
+                        req.status === TransferStatus.Rejected ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
+                      {req.status === TransferStatus.Pending ? 'ESPERANDO APROBACIÓN' : req.status}
+                    </span>
+                  </div>
+                  {req.status === TransferStatus.Pending && (
+                    <button
+                      onClick={() => handleCancel(req.id)}
+                      disabled={!!processingId}
+                      className="w-full mt-2 border border-gray-600 text-gray-400 py-2 rounded-lg text-sm hover:text-white hover:border-white transition-colors"
+                    >
+                      CANCELAR SOLICITUD
+                    </button>
                   )}
                 </div>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )
         )}
       </div>
     </div>

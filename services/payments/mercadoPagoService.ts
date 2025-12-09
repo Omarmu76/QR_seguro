@@ -1,36 +1,50 @@
 // Archivo: services/payments/mercadoPagoService.ts
-// Módulo específico para Mercado Pago (nuestra primera implementación)
-
-// (Hemos eliminado la declaración 'declare global' que causaba errores)
-
 import { Item } from '../../types';
 
-// Leemos la Clave Pública de 'process.env' (inyectada por Vite)
-const MERCADO_PAGO_PUBLIC_KEY = process.env.VITE_MP_PUBLIC_KEY;
+// Leemos la configuración del entorno
+const MERCADO_PAGO_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY;
+const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
-/**
- * Esta función se conectará a nuestro Backend (Cloud Function)
- * para crear una preferencia de pago.
- */
 export const createMercadoPagoPreference = async (item: Item) => {
-  console.log('Iniciando pago con Mercado Pago para:', item.qrId);
-  console.log('Usando Public Key:', MERCADO_PAGO_PUBLIC_KEY);
-  
-  // ---
-  // --- LÓGICA DE PAGO FUTURA ---
-  // 1. Llamar a nuestro Cloud Function 'createPaymentPreference'
-  // 2. El Cloud Function usa el ACCESS_TOKEN (secreto) para hablar con MP
-  // 3. Devuelve un 'preferenceId' o 'checkoutUrl'
-  // ---
-  
-  // Por ahora, simulamos una respuesta
-  console.warn('Mercado Pago no implementado. Simulando link de pago.');
-  
-  // Si la Public Key no está configurada, fallamos para avisar.
+  console.log('1. Iniciando solicitud de preferencia para:', item.qrId);
+
   if (!MERCADO_PAGO_PUBLIC_KEY) {
-    throw new Error('La clave pública (VITE_MP_PUBLIC_KEY) de Mercado Pago no está configurada en .env.local');
+    throw new Error('Falta VITE_MP_PUBLIC_KEY en .env.local');
   }
-  
-  // Devolvemos un link falso para probar el flujo
-  return { checkoutUrl: 'https://www.mercadopago.com.ar/pagar/dummy-link' };
+
+  try {
+    // CONEXIÓN REAL AL BACKEND
+    const response = await fetch(`${API_URL}/create_preference`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: `Activación Item: ${item.qrId}`, // Título que verá el usuario
+        quantity: 1,
+        unit_price: Number(import.meta.env.VITE_PRICE || 1.99), // Precio desde .env
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Error del servidor:', errorData);
+      throw new Error('El servidor rechazó la creación de la preferencia');
+    }
+
+    const data = await response.json();
+    console.log('2. Preferencia creada con éxito:', data);
+
+    // Mercado Pago devuelve un ID de preferencia (preferenceId)
+    // Retornamos el ID para que el componente 'Wallet' lo use, 
+    // o la URL si decidimos redirigir (init_point).
+    return {
+      preferenceId: data.id,
+      init_point: data.init_point // Por si decides redirigir
+    };
+
+  } catch (error) {
+    console.error('3. Error fatal creando preferencia:', error);
+    throw error;
+  }
 };

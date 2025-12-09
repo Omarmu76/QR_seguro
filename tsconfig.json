@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ESNext"
+    ],
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
@@ -15,8 +19,22 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "allowJs": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": [
+      "vite/client"
+    ]
   },
-  "include": ["src", "index.tsx", "App.tsx", "types.ts", "firebaseConfig.ts", "components", "screens", "services"],
-  "exclude": ["node_modules"]
+  "include": [
+    "src",
+    "index.tsx",
+    "App.tsx",
+    "types.ts",
+    "firebaseConfig.ts",
+    "components",
+    "screens",
+    "services"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
