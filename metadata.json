@@ -1,0 +1,8 @@
+{
+  "name": "QR Seguro",
+  "description": "An application to generate, manage, and scan QR codes for items to track their status, report theft, and manage ownership transfer. Includes a public list of reported items to enhance community security.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
