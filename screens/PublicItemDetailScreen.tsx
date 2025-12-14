@@ -1,0 +1,219 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import Spinner from '../components/Spinner';
+import { QRCodeCanvas } from 'qrcode.react';
+import { getItemById, getUserById, updateItemStatus } from '../services/itemService';
+import { Item, ItemStatus } from '../types';
+
+interface PublicItemDetailScreenProps {
+  itemId: string;
+  onNavigate: (path: string) => void;
+}
+
+interface FullItemDetails extends Item {
+  ownerContact: {
+    email: string;
+    nombreCompleto: string;
+  };
+}
+
+// <<< Reutilizamos el helper de Geolocalización >>>
+const getCurrentLocation = (): Promise<{ lat: number, lng: number }> => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocalización no es soportada."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      (err) => {
+        reject(new Error("No se pudo obtener la ubicación."));
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  });
+};
+// --- Fin Helper ---
+
+const PublicItemDetailScreen: React.FC<PublicItemDetailScreenProps> = ({ itemId, onNavigate }) => {
+  const [details, setDetails] = useState<FullItemDetails | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [error, setError] = useState('');
+
+  const fetchDetails = useCallback(async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const itemData = await getItemById(itemId);
+      if (!itemData || !itemData.ownerId) {
+        setError('El item no fue encontrado o está incompleto.');
+        setIsLoading(false);
+        return;
+      }
+
+      const ownerData = await getUserById(itemData.ownerId);
+      if (!ownerData) {
+        setError('No se pudo encontrar la información de contacto del dueño.');
+        setIsLoading(false);
+        return;
+      }
+      
+      setDetails({
+        ...itemData,
+        ownerContact: ownerData,
+      });
+
+    } catch (e) {
+      setError('Ocurrió un error al cargar los detalles.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [itemId]);
+
+  useEffect(() => {
+    fetchDetails();
+  }, [fetchDetails]);
+  
+  const handleRecoverItem = async () => {
+      if (!details || !details.ownerId || !details.qrId) return;
+      setIsUpdating(true);
+      setError('');
+      
+      let location = null;
+      try {
+        location = await getCurrentLocation();
+      } catch (err) {
+          // No es crítico si falla el GPS, pero avisamos
+          console.warn("No se pudo obtener ubicación de recuperación.");
+      }
+      
+      try {
+          // "public" es el bypass de ID de usuario
+          await updateItemStatus(details.qrId, "public", ItemStatus.Recuperado, location);
+          setDetails(prev => prev ? {
+              ...prev, 
+              status: ItemStatus.Recuperado,
+              recoveryLocation: location,
+              recoveryTimestamp: Date.now()
+          } : null);
+      } catch (e) {
+          setError("Error al actualizar el estado.");
+      } finally {
+          setIsUpdating(false);
+      }
+  };
+
+  // --- Helper para mostrar fechas ---
+  const formatDate = (timestamp: number | null | undefined) => {
+      if (!timestamp) return 'N/A';
+      return new Date(timestamp).toLocaleString('es-AR');
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-red-600 text-white">
+        <header className="bg-black/20 p-4 flex justify-between items-center text-white shadow-lg">
+            <button onClick={() => onNavigate('/denuncias')} className="p-1" aria-label="Volver a la lista">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+            <h1 className="text-xl font-bold uppercase tracking-wider">Detalle Denuncia</h1>
+            <div className="w-8"></div>
+        </header>
+      <div className="flex-grow p-4 overflow-y-auto flex flex-col items-center">
+        {isLoading ? (
+          <div className="flex justify-center items-center h-full">
+            <Spinner />
+          </div>
+        ) : error ? (
+          <div className="text-center text-yellow-300 bg-black/30 p-4 rounded-lg">{error}</div>
+        ) : details ? (
+          <>
+            <div className="w-full max-w-[250px] mt-4">
+                {details.qrId && details.shortId ? (
+                     <div className="bg-white p-4 rounded-lg shadow-inner flex flex-col items-center space-y-3">
+                        <span className="bg-white px-3 py-1 border-2 border-black rounded-md text-black text-xl font-bold tracking-widest">
+                            {details.shortId}
+                        </span>
+                        <QRCodeCanvas
+                            id="public-item-detail-qr"
+                            value={details.qrId}
+                            size={256}
+                            style={{ width: '100%', height: 'auto' }}
+                            bgColor={"#ffffff"}
+                            fgColor={"#000000"}
+                            level={"H"}
+                            includeMargin={false}
+                        />
+                    </div>
+                ) : (
+                    <div className="w-full aspect-square bg-gray-700 flex items-center justify-center p-8 rounded-lg">
+                        <p>Error al mostrar QR</p>
+                    </div>
+                )}
+            </div>
+
+            <p className="font-bold text-2xl my-3 tracking-widest">
+                {details.status === ItemStatus.Recuperado ? 'RECUPERADO' : 'DENUNCIADO'}
+            </p>
+
+            <div className="w-full bg-yellow-300 text-black p-4 rounded-lg border-4 border-black/50 space-y-2 mb-4">
+                <p className="font-bold text-lg">Contacto: {details.ownerContact.nombreCompleto}</p>
+                <p>Email: {details.ownerContact.email}</p>
+                <p className="font-semibold">{details.tipo.toUpperCase()}</p>
+                <p className="text-sm">ID: {details.identificador}</p>
+                <p className="text-sm">MARCA: {details.marca} / {details.modelo}</p>
+                <p className="font-bold text-sm pt-2 border-t border-black/20">
+                    DENUNCIADO: {formatDate(details.locationTimestamp)}
+                </p>
+                {details.status === ItemStatus.Recuperado && (
+                   <p className="font-bold text-sm text-blue-800">
+                       RECUPERADO: {formatDate(details.recoveryTimestamp)}
+                   </p>
+                )}
+            </div>
+            
+            {/* --- MAPA ACTUALIZADO --- */}
+            {details.location ? (
+                <a 
+                    href={`https://www.google.com/maps?q=${details.location.lat},${details.location.lng}`}
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="w-full bg-blue-700 rounded-lg flex items-center justify-center text-white font-bold text-lg hover:bg-blue-800 transition-colors px-4 py-2 my-2"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span className='ml-2 text-center'>VER UBICACIÓN DE DENUNCIA</span>
+                </a>
+            ) : (
+                <div className="my-2 w-full bg-gray-500 rounded-lg flex items-center justify-center opacity-50 px-4 py-2">
+                   <span className='ml-2'>Ubicación no reportada</span>
+                </div>
+            )}
+            {/* --- FIN MAPA --- */}
+
+            <button
+                onClick={handleRecoverItem}
+                disabled={isUpdating || details.status === ItemStatus.Recuperado}
+                className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold shadow-lg disabled:bg-gray-500 disabled:opacity-70 flex justify-center items-center transition-colors my-2"
+            >
+                {isUpdating ? <Spinner/> : 'MARCAR COMO RECUPERADO'}
+            </button>
+            <button onClick={() => onNavigate('/')} className="mt-3 bg-sky-500 text-white px-8 py-2 rounded-lg font-bold hover:bg-sky-600 transition-colors">
+              INICIO
+            </button>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+};
+
+export default PublicItemDetailScreen;
