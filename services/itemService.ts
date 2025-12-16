@@ -18,11 +18,11 @@ const generateShortId = (length: number = 6): string => {
     return result;
 };
 
-// --- CREACIÓN (AHORA RECIBE Y GUARDA UBICACIÓN INICIAL) ---
+// --- CREACIÓN ---
 export const saveItem = async (
     itemData: Omit<Item, 'qrId' | 'status' | 'ownerId' | 'shortId'>,
     userId: string,
-    initialLocation: { lat: number, lng: number } | null // <--- NUEVO: GPS AL NACER
+    initialLocation: { lat: number, lng: number } | null
 ): Promise<Item> => {
     try {
         const shortId = generateShortId(6);
@@ -31,8 +31,7 @@ export const saveItem = async (
             status: ItemStatus.EnRegla,
             ownerId: userId,
             shortId: shortId,
-            paymentStatus: PaymentStatus.Pending,
-            // Guardamos la ubicación inicial para que el pin verde exista desde el día 1
+            paymentStatus: PaymentStatus.Pending, // Nace pendiente
             location: initialLocation,
             locationTimestamp: initialLocation ? Date.now() : null
         };
@@ -40,6 +39,7 @@ export const saveItem = async (
         await updateDoc(docRef, { qrId: docRef.id });
         return { ...newItem, qrId: docRef.id };
     } catch (error) {
+        console.error("Error saving item:", error);
         throw new Error("Could not save item.");
     }
 };
@@ -73,26 +73,87 @@ export const getItemByShortId = async (shortId: string): Promise<{ item: Item, s
     }
 };
 
+// BLINDAJE: Si falla la lectura, devuelve array vacío en lugar de romper la pantalla.
 export const getAllUserItems = async (userId: string): Promise<Item[]> => {
     try {
         const q = query(collection(db, "Items"), where("ownerId", "==", userId));
         const querySnapshot = await getDocs(q);
         return querySnapshot.docs.map((doc) => ({ ...doc.data(), qrId: doc.id } as Item));
     } catch (error) {
+        console.error("Error al traer items del usuario:", error);
         return [];
     }
 };
 
-export const getPublicReportedItems = async (): Promise<Item[]> => {
+// --- NUEVO: GESTIÓN DE PAGOS ---
+
+export const getItemsInReview = async (): Promise<Item[]> => {
     try {
-        const q = query(collection(db, "Items"), where("status", "in", [ItemStatus.Denunciado, ItemStatus.Recuperado]));
+        const q = query(collection(db, "Items"), where("paymentStatus", "==", PaymentStatus.Review));
         const querySnapshot = await getDocs(q);
         return querySnapshot.docs.map((doc) => ({ ...doc.data(), qrId: doc.id } as Item));
     } catch (error) {
+        console.error("Error fetching items in review:", error);
         return [];
     }
 };
 
+// Función principal para marcar como "En Revisión"
+export const markItemAsInReview = async (itemId: string, method: string): Promise<void> => {
+    try {
+        const docRef = doc(db, "Items", itemId);
+        await updateDoc(docRef, {
+            paymentStatus: PaymentStatus.Review,
+            paymentMethod: method,
+            lastPaymentDate: Date.now()
+        });
+    } catch (error) {
+        console.error("Error marking item as review:", error);
+        throw error;
+    }
+};
+
+// --- FIX: ESTA ES LA FUNCIÓN QUE FALTABA Y CAUSABA EL ERROR ---
+// Mantenemos esta función para compatibilidad con PaymentScreen.tsx
+export const updateItemPaymentStatus = async (itemId: string, status: PaymentStatus): Promise<void> => {
+    try {
+        const docRef = doc(db, "Items", itemId);
+        await updateDoc(docRef, {
+            paymentStatus: status,
+            lastPaymentDate: Date.now()
+        });
+    } catch (error) {
+        console.error("Error updating payment status:", error);
+        throw error;
+    }
+};
+
+export const approveItemPayment = async (itemId: string): Promise<void> => {
+    try {
+        const docRef = doc(db, "Items", itemId);
+        await updateDoc(docRef, {
+            paymentStatus: PaymentStatus.Paid,
+            lastPaymentDate: Date.now()
+        });
+    } catch (error) {
+        console.error("Error approving payment:", error);
+        throw error;
+    }
+};
+
+export const rejectItemPayment = async (itemId: string): Promise<void> => {
+    try {
+        const docRef = doc(db, "Items", itemId);
+        await updateDoc(docRef, {
+            paymentStatus: PaymentStatus.Pending
+        });
+    } catch (error) {
+        console.error("Error rejecting payment:", error);
+        throw error;
+    }
+};
+
+// ... Resto de funciones auxiliares sin cambios ...
 export const getItemById = async (itemId: string): Promise<Item | null> => {
     try {
         const docRef = doc(db, "Items", itemId);
@@ -109,7 +170,6 @@ export const getUserById = async (userId: string): Promise<{ email: string, nomb
     } catch (e) { return null; }
 };
 
-// --- UPDATE ESTADO (PROTEGIDO PARA NO BORRAR GPS) ---
 export const updateItemStatus = async (
     itemId: string, userId: string, newStatus: ItemStatus, locationData: { lat: number, lng: number } | null = null
 ): Promise<void> => {
@@ -121,35 +181,27 @@ export const updateItemStatus = async (
 
         if (itemData.ownerId === userId || userId === "public") {
             let updateData: any = { status: newStatus };
-
             if (newStatus === ItemStatus.Denunciado) {
-                // Al denunciar, actualizamos a la ubicación del reporte
                 updateData.location = locationData;
                 updateData.locationTimestamp = Date.now();
                 updateData.recoveryLocation = null;
                 updateData.recoveryTimestamp = null;
             } else if (newStatus === ItemStatus.EnRegla) {
-                // *** IMPORTANTE: NO TOCAR 'location' ***
-                // Mantenemos la última ubicación conocida para que el dueño siga viendo el pin verde.
                 updateData.recoveryLocation = null;
                 updateData.recoveryTimestamp = null;
             } else if (newStatus === ItemStatus.Recuperado) {
                 updateData.recoveryLocation = locationData;
                 updateData.recoveryTimestamp = Date.now();
             }
-
-            // Solo borramos ubicación si se vende/transfiere (privacidad del nuevo dueño)
             if (newStatus === ItemStatus.Vendido) {
                 updateData.location = null;
                 updateData.locationTimestamp = null;
             }
-
             await updateDoc(docRef, updateData);
         } else { throw new Error("Permission denied."); }
     } catch (error) { throw error; }
 };
 
-// --- UPDATE SOLO UBICACIÓN ---
 export const updateItemLocation = async (itemId: string, userId: string, locationData: { lat: number, lng: number }) => {
     try {
         const docRef = doc(db, "Items", itemId);
@@ -157,7 +209,6 @@ export const updateItemLocation = async (itemId: string, userId: string, locatio
         if (!docSnap.exists()) throw new Error("Item not found.");
         const itemData = docSnap.data() as Item;
         if (itemData.ownerId !== userId) throw new Error("Permission denied.");
-
         await updateDoc(docRef, { location: locationData, locationTimestamp: Date.now() });
     } catch (error) { throw error; }
 };
@@ -184,7 +235,6 @@ export const deleteItem = async (qrId: string, userId: string): Promise<void> =>
     } catch (error) { throw error; }
 };
 
-// --- TRANSFERENCIAS ---
 export const createTransferRequest = async (item: Item, buyer: User): Promise<TransferRequest> => {
     if (!item.qrId || !item.ownerId) throw new Error("Datos del item inválidos.");
     const transfersRef = collection(db, "Transfers");
@@ -228,4 +278,20 @@ export const rejectTransfer = async (transferId: string): Promise<void> => {
 
 export const cancelTransfer = async (transferId: string): Promise<void> => {
     try { const transferRef = doc(db, "Transfers", transferId); await deleteDoc(transferRef); } catch (error) { throw new Error("Could not cancel transfer."); }
+};
+
+// --- FIX: RESTAURACIÓN DE FUNCIÓN PARA REPORTES PÚBLICOS ---
+export const getPublicReportedItems = async (): Promise<Item[]> => {
+    try {
+        // Traemos items Denunciados o Recuperados para mostrar en la lista pública
+        const q = query(
+            collection(db, "Items"),
+            where("status", "in", [ItemStatus.Denunciado, ItemStatus.Recuperado])
+        );
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map((doc) => ({ ...doc.data(), qrId: doc.id } as Item));
+    } catch (error) {
+        console.error("Error fetching public reported items:", error);
+        return [];
+    }
 };

@@ -1,3 +1,4 @@
+// ... (imports igual que antes)
 import React, { useState, useEffect, useCallback } from 'react';
 import { User } from 'firebase/auth';
 import { onAuthStateChange, signOutUser } from './services/authService';
@@ -14,7 +15,7 @@ import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import PublicReportedListScreen from './screens/PublicReportedListScreen';
 import PublicItemDetailScreen from './screens/PublicItemDetailScreen';
-import TransfersScreen from './screens/TransfersScreen'; // <<< PANTALLA MEJORADA
+import TransfersScreen from './screens/TransfersScreen';
 import InputCodeScreen from './screens/InputCodeScreen';
 import EditItemScreen from './screens/EditItemScreen';
 import MapScreen from './screens/MapScreen';
@@ -79,16 +80,12 @@ const App: React.FC = () => {
     const isReported = result.status === ItemStatus.Denunciado;
 
     if (isOwner) {
-      // Si escaneo lo mío -> Lo veo
       handleViewRequest(result.item);
-      setModal(null); // Cierro escáner
+      setModal(null);
     } else if (isReported) {
-      // Si es robado -> Ya se reportó en ScanScreen, solo mostramos ficha pública
-      // O podríamos mostrar ResultScreen. Vamos a la ficha pública para más impacto.
       navigate(`/denuncias/${result.item.qrId}`);
       setModal(null);
     } else {
-      // Si no es mío y está "En Regla" -> ES UNA COMPRA/TRANSFERENCIA
       setItemToTransfer(result.item);
       setModal(Screen.REQUEST_TRANSFER);
     }
@@ -154,7 +151,18 @@ const App: React.FC = () => {
   return (
     <div className="bg-gray-900 min-h-screen flex items-center justify-center">
       <div className="w-full max-w-sm h-[800px] max-h-[90vh] bg-[#0d1226] rounded-3xl shadow-2xl overflow-hidden flex flex-col relative">
-        <SideMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} onNavigate={handleMenuNavigate} onScanRequest={handleMenuScanRequest} onInputCodeRequest={handleMenuInputCodeRequest} onPublicNavigate={navigate} />
+
+        {/* CORRECCIÓN CRÍTICA AQUÍ: Agregar user={user} */}
+        <SideMenu
+          isOpen={isMenuOpen}
+          onClose={() => setIsMenuOpen(false)}
+          onNavigate={handleMenuNavigate}
+          onScanRequest={handleMenuScanRequest}
+          onInputCodeRequest={handleMenuInputCodeRequest}
+          onPublicNavigate={navigate}
+          user={user}
+        />
+
         <div className="relative z-10 flex-shrink-0 bg-[#1e2a47] p-2 flex justify-between items-center text-white border-b border-blue-900">
           <span className="text-xs truncate">{user.email}</span>
           <button onClick={signOutUser} className="text-xs bg-red-600 px-3 py-1 rounded hover:bg-red-700 transition-colors">Salir</button>
