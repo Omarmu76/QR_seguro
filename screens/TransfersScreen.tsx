@@ -40,25 +40,26 @@ const TransfersScreen: React.FC<TransfersScreenProps> = ({ user, onMenuClick, on
   }, [fetchRequests]);
 
   const handleApprove = async (req: TransferRequest) => {
-    if (!window.confirm("¿Confirmas que recibiste el pago y deseas transferir la propiedad? Esta acción es irreversible.")) return;
+    if (!window.confirm("¿Confirmas que recibiste el pago y deseas transferir la propiedad?")) return;
     setProcessingId(req.id);
     try {
       await approveTransfer(req.id, req.itemId, req.buyerId);
       await fetchRequests();
-      alert("¡Transferencia exitosa! El ítem ya no te pertenece.");
+      alert("¡Transferencia exitosa!");
     } catch (e) {
-      alert("Error al aprobar transferencia.");
+      alert("Error al aprobar.");
     } finally {
       setProcessingId(null);
     }
   };
 
   const handleReject = async (id: string) => {
-    if (!window.confirm("¿Rechazar solicitud?")) return;
+    if (!window.confirm("¿Rechazar esta solicitud?")) return;
     setProcessingId(id);
     try {
       await rejectTransfer(id);
       await fetchRequests();
+      alert("Solicitud rechazada.");
     } catch (e) {
       alert("Error al rechazar.");
     } finally {

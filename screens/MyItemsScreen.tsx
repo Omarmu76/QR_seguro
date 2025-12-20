@@ -15,12 +15,32 @@ interface MyItemsScreenProps {
   onActivateRequest: (item: Item) => void;
 }
 
-const getCurrentLocation = (): Promise<{ lat: number, lng: number }> => {
+// --- FUNCIÓN GPS ROBUSTA ---
+// Intenta varias veces obtener la posición para evitar fallos de "inicio en frío"
+const getRobustLocation = (): Promise<{ lat: number, lng: number }> => {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) { reject(new Error("Sin GPS")); return; }
+    if (!navigator.geolocation) {
+      reject(new Error("Sin soporte GPS"));
+      return;
+    }
+
+    const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+
+    // Intento 1
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => reject(err), { enableHighAccuracy: true, timeout: 5000 }
+      (err) => {
+        console.warn("Fallo GPS intento 1, reintentando...", err);
+        // Intento 2 (Reintento automático)
+        setTimeout(() => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            (_errFinal) => reject(new Error("No se pudo obtener GPS. Activa la ubicación y sal al exterior.")),
+            options
+          );
+        }, 1000);
+      },
+      options
     );
   });
 };
@@ -69,27 +89,35 @@ const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEdit
     setProcessingId(item.qrId);
     try {
       let location = null;
-      if (!isReported) { try { location = await getCurrentLocation(); } catch (e) { } }
+      if (!isReported) {
+        // Si voy a denunciar, necesito GPS obligatorio
+        try { location = await getRobustLocation(); } catch (e) {
+          alert("⚠️ Error: Se necesita GPS para reportar el robo (ubicación del incidente).");
+          setProcessingId(null);
+          return;
+        }
+      }
       const newStatus = isReported ? ItemStatus.EnRegla : ItemStatus.Denunciado;
       await updateItemStatus(item.qrId, user.uid, newStatus, location);
       await fetchItems();
     } catch (error) { alert("Error de conexión."); } finally { setProcessingId(null); }
   };
 
-  // --- NUEVA FUNCIÓN: ACTUALIZAR UBICACIÓN ---
   const handleUpdateLocation = async (item: Item) => {
     if (!item.qrId) return;
-    if (!window.confirm("¿Actualizar la ubicación de este artículo a tu posición actual? Esto servirá para verlo en el mapa.")) return;
+    // Confirmación simple del navegador para agilidad
+    if (!window.confirm("¿Actualizar la ubicación de este artículo a tu posición actual?")) return;
+
     setProcessingId(item.qrId);
     try {
-      const location = await getCurrentLocation();
+      const location = await getRobustLocation(); // Usamos la nueva función robusta
       if (item.qrId) {
         await updateItemLocation(item.qrId, user.uid, location);
-        alert("📍 Ubicación actualizada. Ahora puedes verlo en el mapa.");
+        alert("📍 Ubicación actualizada exitosamente.");
         await fetchItems();
       }
-    } catch (error) {
-      alert("No se pudo obtener el GPS. Activa la ubicación.");
+    } catch (error: any) {
+      alert(error.message || "Error de GPS.");
     } finally {
       setProcessingId(null);
     }
@@ -133,8 +161,6 @@ const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEdit
                   const isInReview = item.paymentStatus === PaymentStatus.Review;
                   const isExpanded = expandedItemId === item.qrId;
                   const isReported = item.status === ItemStatus.Denunciado;
-
-                  // Si no está pagado (Pending o Review), no se puede editar ni denunciar
                   const actionsDisabled = isLocked || isInReview;
 
                   return (
@@ -170,8 +196,6 @@ const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEdit
                           <div className="flex flex-col gap-3">
                             <div className="grid grid-cols-2 gap-3">
                               <button onClick={() => onViewRequest(item)} className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/50 py-3 rounded-lg font-bold text-xs transition-colors">VER DETALLES</button>
-
-                              {/* BOTÓN EDITAR BLOQUEADO SI NO PAGÓ */}
                               <button
                                 onClick={() => !actionsDisabled && onEditRequest(item)}
                                 disabled={actionsDisabled}
@@ -183,18 +207,15 @@ const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEdit
 
                             {!actionsDisabled && (
                               <>
-                                {/* BOTÓN DE UBICACIÓN (CLAVE PARA VER EN EL MAPA) */}
                                 <button onClick={() => handleUpdateLocation(item)} disabled={!!processingId} className="w-full py-3 bg-blue-900/40 border border-blue-500/30 hover:bg-blue-900/60 text-blue-300 rounded-lg font-bold text-xs flex justify-center items-center gap-2 transition-colors">
                                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                                   ACTUALIZAR UBICACIÓN (PARA MAPA)
                                 </button>
-
                                 <button onClick={() => initiateToggleStatus(item)} disabled={!!processingId} className={`w-full py-4 rounded-xl font-black text-sm shadow-lg transition-transform active:scale-[0.98] flex justify-center items-center gap-2 ${isReported ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-red-600 hover:bg-red-500 text-white'}`}>
                                   {processingId === item.qrId ? <Spinner /> : (isReported ? "MARCAR COMO RECUPERADO" : "🚨 DENUNCIAR ROBO")}
                                 </button>
                               </>
                             )}
-
                             <button onClick={() => initiateDelete(item)} className="mt-2 text-red-500/50 hover:text-red-500 text-[10px] uppercase font-bold tracking-widest text-center py-2">Eliminar del sistema</button>
                           </div>
                         </div>

@@ -1,6 +1,6 @@
 import {
     collection, addDoc, getDoc, getDocs, query, where, doc, deleteDoc, updateDoc,
-    writeBatch, serverTimestamp, orderBy, Timestamp
+    writeBatch, serverTimestamp, orderBy, Timestamp, onSnapshot, Unsubscribe
 } from "firebase/firestore";
 import { User } from 'firebase/auth';
 import { db } from "../firebaseConfig";
@@ -235,40 +235,92 @@ export const deleteItem = async (qrId: string, userId: string): Promise<void> =>
     } catch (error) { throw error; }
 };
 
+// --- TRANSFERENCIAS (LÓGICA CORREGIDA Y FUNCIONAL) ---
+
 export const createTransferRequest = async (item: Item, buyer: User): Promise<TransferRequest> => {
     if (!item.qrId || !item.ownerId) throw new Error("Datos del item inválidos.");
+
+    // Evitar duplicados
     const transfersRef = collection(db, "Transfers");
-    const q = query(transfersRef, where("itemId", "==", item.qrId), where("status", "==", TransferStatus.Pending));
+    const q = query(transfersRef,
+        where("itemId", "==", item.qrId),
+        where("status", "==", TransferStatus.Pending)
+    );
     const existingTransfers = await getDocs(q);
     if (!existingTransfers.empty) throw new Error("Ya existe una solicitud pendiente.");
+
     const newTransferData: Omit<TransferRequest, 'id' | 'createdAt'> = {
-        itemId: item.qrId, itemDetails: { tipo: item.tipo, marca: item.marca, modelo: item.modelo, identificador: item.identificador },
-        sellerId: item.ownerId, buyerId: buyer.uid, buyerEmail: buyer.email || "Usuario", status: TransferStatus.Pending,
+        itemId: item.qrId,
+        itemDetails: { tipo: item.tipo, marca: item.marca, modelo: item.modelo, identificador: item.identificador },
+        sellerId: item.ownerId,
+        buyerId: buyer.uid,
+        buyerEmail: buyer.email || "Usuario",
+        status: TransferStatus.Pending,
     };
+
     try {
-        const docRef = await addDoc(collection(db, "Transfers"), { ...newTransferData, createdAt: serverTimestamp(), }); return { ...newTransferData, id: docRef.id, createdAt: Date.now() };
-    } catch (error) { throw new Error("No se pudo crear la solicitud."); }
+        const docRef = await addDoc(collection(db, "Transfers"), {
+            ...newTransferData,
+            createdAt: serverTimestamp(),
+        });
+        return { ...newTransferData, id: docRef.id, createdAt: Date.now() };
+    } catch (error) {
+        throw new Error("No se pudo crear la solicitud.");
+    }
 };
 
 export const getPendingTransfers = async (sellerId: string): Promise<TransferRequest[]> => {
     try {
-        const transfersRef = collection(db, "Transfers"); const q = query(transfersRef, where("sellerId", "==", sellerId), where("status", "==", TransferStatus.Pending), orderBy("createdAt", "desc")); const querySnapshot = await getDocs(q); return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: (doc.data().createdAt as Timestamp)?.toMillis() || Date.now() } as TransferRequest));
-    } catch (error) { throw new Error("Error fetching pending transfers."); }
+        const transfersRef = collection(db, "Transfers");
+        const q = query(transfersRef,
+            where("sellerId", "==", sellerId),
+            where("status", "==", TransferStatus.Pending),
+            orderBy("createdAt", "desc")
+        );
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: (doc.data().createdAt as Timestamp)?.toMillis() || Date.now() } as TransferRequest));
+    } catch (error) {
+        throw new Error("Error fetching pending transfers.");
+    }
 };
 
 export const getSentTransfers = async (buyerId: string): Promise<TransferRequest[]> => {
     try {
-        const transfersRef = collection(db, "Transfers"); const q = query(transfersRef, where("buyerId", "==", buyerId), orderBy("createdAt", "desc")); const querySnapshot = await getDocs(q); return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: (doc.data().createdAt as Timestamp)?.toMillis() || Date.now() } as TransferRequest));
-    } catch (error) { throw new Error("Error fetching sent transfers."); }
+        const transfersRef = collection(db, "Transfers");
+        const q = query(transfersRef,
+            where("buyerId", "==", buyerId),
+            orderBy("createdAt", "desc")
+        );
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: (doc.data().createdAt as Timestamp)?.toMillis() || Date.now() } as TransferRequest));
+    } catch (error) {
+        throw new Error("Error fetching sent transfers.");
+    }
 };
 
 export const approveTransfer = async (transferId: string, itemId: string, buyerId: string) => {
     const batch = writeBatch(db);
+
+    // 1. Actualizar estado de la solicitud
     const transferRef = doc(db, "Transfers", transferId);
     batch.update(transferRef, { status: TransferStatus.Approved });
+
+    // 2. Mover el artículo al nuevo dueño
     const itemRef = doc(db, "Items", itemId);
-    const newShortId = generateShortId(6);
-    batch.update(itemRef, { ownerId: buyerId, status: ItemStatus.EnRegla, shortId: newShortId, paymentStatus: PaymentStatus.Pending, location: null, locationTimestamp: null, recoveryLocation: null, recoveryTimestamp: null, });
+    const newShortId = generateShortId(6); // Nuevo QR para seguridad
+
+    batch.update(itemRef, {
+        ownerId: buyerId,
+        status: ItemStatus.EnRegla,
+        shortId: newShortId,
+        paymentStatus: PaymentStatus.Pending, // <--- EL CANDADO DE NEGOCIO
+        location: null,
+        locationTimestamp: null,
+        recoveryLocation: null,
+        recoveryTimestamp: null,
+        recoveryLocationTimestamp: null, // Asegurar limpieza total
+    });
+
     await batch.commit();
 };
 
@@ -294,4 +346,26 @@ export const getPublicReportedItems = async (): Promise<Item[]> => {
         console.error("Error fetching public reported items:", error);
         return [];
     }
+};
+
+// --- REAL-TIME SUBSCRIPTIONS (UBER-LIKE) ---
+
+export const subscribeToUserItems = (userId: string, callback: (items: Item[]) => void): Unsubscribe => {
+    const q = query(collection(db, "Items"), where("ownerId", "==", userId));
+    return onSnapshot(q, (snapshot) => {
+        const items = snapshot.docs.map((doc) => ({ ...doc.data(), qrId: doc.id } as Item));
+        callback(items);
+    }, (error) => {
+        console.error("Error subscribiendo a mis items:", error);
+    });
+};
+
+export const subscribeToPublicReportedItems = (callback: (items: Item[]) => void): Unsubscribe => {
+    const q = query(collection(db, "Items"), where("status", "in", [ItemStatus.Denunciado, ItemStatus.Recuperado]));
+    return onSnapshot(q, (snapshot) => {
+        const items = snapshot.docs.map((doc) => ({ ...doc.data(), qrId: doc.id } as Item));
+        callback(items);
+    }, (error) => {
+        console.error("Error subscribiendo a alertas públicas:", error);
+    });
 };

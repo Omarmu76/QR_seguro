@@ -62,7 +62,7 @@ const RequestTransferScreen: React.FC<RequestTransferScreenProps> = ({ item, use
         <div className="bg-black/30 p-4 rounded-lg mb-6 border border-white/5">
           <p className="text-xs text-blue-400 font-bold uppercase tracking-wider mb-1">{item.tipo}</p>
           <h3 className="text-lg font-bold text-white">{item.marca} {item.modelo}</h3>
-          <p className="text-sm text-gray-400 mt-1">ID Visible: <span className="font-mono text-white">{item.shortId || item.identificador}</span></p>
+          <p className="text-sm text-gray-400 mt-1">ID Visible: <span className="font-mono text-white">{item.shortId}</span></p>
         </div>
 
         {error && (

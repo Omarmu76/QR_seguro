@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User } from 'firebase/auth';
 import Header from '../components/Header';
 import { Item } from '../types';
@@ -12,21 +12,6 @@ interface GenerateScreenProps {
   onMenuClick: () => void;
 }
 
-// Helper para capturar GPS (Estricto)
-const getCurrentLocation = (): Promise<{ lat: number, lng: number }> => {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error("El dispositivo no soporta GPS."));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => reject(err),
-      { enableHighAccuracy: true, timeout: 10000 } // Aumenté a 10s para dar tiempo al celular
-    );
-  });
-};
-
 const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, user, onMenuClick }) => {
   const [item, setItem] = useState<Omit<Item, 'qrId' | 'status' | 'ownerId'>>({
     tipo: 'Vehiculo',
@@ -35,7 +20,36 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
     identificador: '',
   });
 
-  // Estado para mensajes de carga específicos
+  // --- LÓGICA DE GPS MEJORADA (INVISIBLE) ---
+  const [bestLocation, setBestLocation] = useState<{ lat: number, lng: number } | null>(null);
+  const watchId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    // Encendemos el GPS en modo "alta precisión" apenas carga la pantalla
+    // Esto permite que el celular refine la ubicación mientras el usuario escribe
+    watchId.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        setBestLocation({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude
+        });
+      },
+      (err) => console.warn("Buscando señal GPS...", err),
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0, // No usar caché vieja
+        timeout: 15000
+      }
+    );
+
+    return () => {
+      if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+    };
+  }, []);
+  // -------------------------------------------
+
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -60,37 +74,34 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
   const handleConfirmGenerate = async () => {
     setConfirmModalOpen(false);
     setIsLoading(true);
-    setError(''); // Limpiamos errores previos
+    setError('');
 
     try {
-      // --- PASO 1: OBTENER GPS OBLIGATORIO ---
-      setLoadingMessage('🛰️ Buscando satélites GPS...');
+      setLoadingMessage('🛰️ Obteniendo ubicación exacta...');
 
-      // Esta línea espera (await). Si falla, salta directo al catch de abajo.
-      // No pasará a saveItem si esto no devuelve coordenadas reales.
-      const location = await getCurrentLocation();
+      // 1. Intentamos usar la ubicación que el watchPosition ya encontró (lo más rápido y preciso)
+      let finalLocation = bestLocation;
 
-      // --- PASO 2: GUARDAR EN BD SOLO SI TENEMOS GPS ---
+      // 2. Si por casualidad aún no tenemos señal (entró y clickeó muy rápido), forzamos una lectura
+      if (!finalLocation) {
+        finalLocation = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            (_err) => reject(new Error("No se pudo obtener GPS. Activa la ubicación y sal al exterior.")),
+            { enableHighAccuracy: true, timeout: 10000 }
+          );
+        });
+      }
+
+      if (!finalLocation) throw new Error("GPS sin señal.");
+
       setLoadingMessage('💾 Guardando artículo...');
-
-      // Si llegamos aquí, location existe "sí o sí"
-      const savedItem = await saveItem(item, user.uid, location);
-
+      const savedItem = await saveItem(item, user.uid, finalLocation);
       onGenerateComplete(savedItem);
 
     } catch (err: any) {
       console.error("Error en proceso:", err);
-      // Filtramos el mensaje de error para el usuario
-      if (err.code === 1) { // Permission denied
-        setError('❌ Permiso de ubicación denegado. Actívalo en ajustes.');
-      } else if (err.code === 2 || err.code === 3) { // Position unavailable / Timeout
-        setError('⚠️ No se pudo obtener señal GPS. Intenta en un lugar abierto.');
-      } else if (err.message === "El dispositivo no soporta GPS.") {
-        setError(err.message);
-      } else {
-        setError('Error al guardar. Verifica tu conexión y el GPS.');
-      }
-      // IMPORTANTE: Al fallar, NO guardamos nada. El usuario debe reintentar.
+      setError(err.message || 'Error al guardar. Verifica tu GPS.');
     } finally {
       setIsLoading(false);
       setLoadingMessage('');
@@ -108,7 +119,6 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
       <Header title="GENERAR QR" onMenuClick={onMenuClick} />
       <div className="flex-grow p-6 overflow-y-auto">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Formulario Estándar */}
           <div>
             <label className="block mb-2 text-sm font-medium text-gray-300">Tipo</label>
             <select name="tipo" value={item.tipo} onChange={handleChange} className={inputClass}>
@@ -135,7 +145,7 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
 
           <div className="bg-blue-900/30 p-3 rounded border border-blue-800">
             <p className="text-xs text-blue-200 text-center">
-              📍 <b>Requisito:</b> Se requiere GPS activo para registrar la ubicación segura inicial.
+              📍 <b>Requisito:</b> Se registrará tu ubicación actual por seguridad.
             </p>
           </div>
 

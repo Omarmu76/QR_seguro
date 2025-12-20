@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-google-maps/api": "^2.20.8",
     "@vitejs/plugin-react": "^5.1.1",
     "firebase": "^12.5.0",
     "html5-qrcode": "^2.3.8",
