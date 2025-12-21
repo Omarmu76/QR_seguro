@@ -5,6 +5,17 @@ import { Item } from '../types';
 import { saveItem } from '../services/itemService';
 import Spinner from '../components/Spinner';
 import ConfirmationModal from '../components/common/ConfirmationModal';
+import { TrackingType } from '../types';
+
+// Función auxiliar para obtener/crear ID del dispositivo (Single-Device Tracking)
+const getDeviceId = () => {
+  let id = localStorage.getItem('qr_device_id');
+  if (!id) {
+    id = 'dev_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+    localStorage.setItem('qr_device_id', id);
+  }
+  return id;
+};
 
 interface GenerateScreenProps {
   onGenerateComplete: (result: Item) => void;
@@ -21,6 +32,7 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
   });
 
   // --- LÓGICA DE GPS MEJORADA (INVISIBLE) ---
+  const [isSelfDevice, setIsSelfDevice] = useState(false); // NUEVO ESTADO DE VINCULACIÓN
   const [bestLocation, setBestLocation] = useState<{ lat: number, lng: number } | null>(null);
   const watchId = useRef<number | null>(null);
 
@@ -96,7 +108,21 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
       if (!finalLocation) throw new Error("GPS sin señal.");
 
       setLoadingMessage('💾 Guardando artículo...');
-      const savedItem = await saveItem(item, user.uid, finalLocation);
+
+      // LÓGICA DE VINCULACIÓN IoT
+      let trackingType: TrackingType = 'PASSIVE';
+      let linkedDeviceId = undefined;
+
+      if (isSelfDevice) {
+        trackingType = 'SELF_DEVICE';
+        linkedDeviceId = getDeviceId();
+      }
+
+      const savedItem = await saveItem({
+        ...item,
+        trackingType,
+        linkedDeviceId
+      }, user.uid, finalLocation);
       onGenerateComplete(savedItem);
 
     } catch (err: any) {
@@ -141,6 +167,28 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
               {item.tipo === 'Vehiculo' ? 'Patente' : 'Número de Serie'}
             </label>
             <input type="text" name="identificador" value={item.identificador} onChange={handleChange} placeholder="Ej: AB 123 CD" className={inputClass} />
+          </div>
+
+          {/* NUEVO: SELECTOR DE VINCULACIÓN (Arquitectura IoT) */}
+          <div className="bg-blue-900/40 p-5 rounded-xl border border-blue-500/40 mb-6 shadow-inner">
+            <div className="flex items-center gap-4">
+              <input
+                type="checkbox"
+                id="selfDevice"
+                checked={isSelfDevice}
+                onChange={(e) => setIsSelfDevice(e.target.checked)}
+                className="w-6 h-6 text-yellow-500 rounded-md focus:ring-yellow-400 bg-gray-800 border-gray-700 cursor-pointer"
+              />
+              <div className="flex flex-col">
+                <label htmlFor="selfDevice" className="text-sm font-bold text-white cursor-pointer select-none">
+                  ¿Es este dispositivo?
+                </label>
+                <p className="text-[10px] text-blue-200/70 leading-relaxed mt-1">
+                  Marca esta casilla SOLO si estás registrando el celular o computadora que estás usando ahora.
+                  Esto activará el <b>Rastreo GPS de Precisión</b> para este objeto.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="bg-blue-900/30 p-3 rounded border border-blue-800">

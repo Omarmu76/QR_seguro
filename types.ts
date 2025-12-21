@@ -60,9 +60,13 @@ export interface TransferRequest {
   sellerId: string;
   buyerId: string;
   buyerEmail: string;
+  buyerLocation?: { lat: number; lng: number }; // <--- NUEVO CAMPO CRÍTICO
   status: TransferStatus;
   createdAt: number;
 }
+
+// NUEVO: ARQUITECTURA DE RASTREO
+export type TrackingType = 'PASSIVE' | 'SELF_DEVICE' | 'EXTERNAL_IOT';
 
 export interface Item {
   qrId?: string; // ID de documento Firestore
@@ -78,10 +82,15 @@ export interface Item {
 
   // Datos de Geolocalización
   location?: { lat: number; lng: number } | null;
-  locationTimestamp?: number | null; // Cuándo se reportó
+  locationTimestamp?: number | null;
 
   recoveryLocation?: { lat: number; lng: number } | null;
   recoveryTimestamp?: number | null;
+  recoveryLocationTimestamp?: number | null;
+
+  // NUEVOS CAMPOS ARQUITECTURA IOT
+  trackingType?: TrackingType; // Define la inteligencia del item
+  linkedDeviceId?: string;     // "Huella digital" del dispositivo (para SELF_DEVICE)
 
   // Datos de Pago
   paymentMethod?: string;
@@ -91,16 +100,16 @@ export interface Item {
 }
 
 export interface PaymentNotification {
-    id: string;
-    itemId: string;
-    userId: string;
-    userEmail: string;
-    amount: number;
-    method: string; // 'PREX', 'CBU', etc.
-    status: 'pending' | 'approved' | 'rejected';
-    createdAt: number;
-    itemDetails?: {
-        marca: string;
-        modelo: string;
-    };
+  id: string;
+  itemId: string;
+  userId: string;
+  userEmail: string;
+  amount: number;
+  method: string; // 'PREX', 'CBU', etc.
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: number;
+  itemDetails?: {
+    marca: string;
+    modelo: string;
+  };
 }

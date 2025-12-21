@@ -18,6 +18,23 @@ const generateShortId = (length: number = 6): string => {
     return result;
 };
 
+// --- TELEMETRÍA Y RASTREO (NUEVO) ---
+
+/**
+ * Actualiza la ubicación de un item de forma ligera para rastreo en vivo.
+ */
+export const updateItemLocationRealTime = async (itemId: string, lat: number, lng: number) => {
+    try {
+        const itemRef = doc(db, "Items", itemId);
+        await updateDoc(itemRef, {
+            location: { lat, lng },
+            locationTimestamp: Date.now()
+        });
+    } catch (error) {
+        console.error("Error GPS (RealTime):", error);
+    }
+};
+
 // --- CREACIÓN ---
 export const saveItem = async (
     itemData: Omit<Item, 'qrId' | 'status' | 'ownerId' | 'shortId'>,
@@ -239,7 +256,11 @@ export const deleteItem = async (qrId: string, userId: string): Promise<void> =>
 
 // --- TRANSFERENCIAS (LÓGICA CORREGIDA Y FUNCIONAL) ---
 
-export const createTransferRequest = async (item: Item, buyer: User): Promise<TransferRequest> => {
+export const createTransferRequest = async (
+    item: Item,
+    buyer: User,
+    location: { lat: number, lng: number } | null = null
+): Promise<TransferRequest> => {
     if (!item.qrId || !item.ownerId) throw new Error("Datos del item inválidos.");
 
     // Evitar duplicados
@@ -257,6 +278,7 @@ export const createTransferRequest = async (item: Item, buyer: User): Promise<Tr
         sellerId: item.ownerId,
         buyerId: buyer.uid,
         buyerEmail: buyer.email || "Usuario",
+        buyerLocation: location || undefined, // <--- GUARDAR UBICACIÓN DEL COMPRADOR
         status: TransferStatus.Pending,
     };
 
@@ -320,11 +342,16 @@ export const getSentTransfers = async (buyerId: string): Promise<TransferRequest
 export const approveTransfer = async (transferId: string, itemId: string, buyerId: string) => {
     const batch = writeBatch(db);
 
-    // 1. Actualizar estado de la solicitud
+    // 1. Recuperar la ubicación inicial capturada en la solicitud (Handshake)
     const transferRef = doc(db, "Transfers", transferId);
+    const transferSnap = await getDoc(transferRef);
+    const transferData = transferSnap.exists() ? transferSnap.data() as TransferRequest : null;
+    const startLocation = transferData?.buyerLocation || null;
+
+    // 2. Actualizar estado de la solicitud
     batch.update(transferRef, { status: TransferStatus.Approved });
 
-    // 2. Mover el artículo al nuevo dueño
+    // 3. Mover el artículo al nuevo dueño aplicando el HANDSHAKE GPS
     const itemRef = doc(db, "Items", itemId);
     const newShortId = generateShortId(6); // Nuevo QR para seguridad
 
@@ -332,12 +359,15 @@ export const approveTransfer = async (transferId: string, itemId: string, buyerI
         ownerId: buyerId,
         status: ItemStatus.EnRegla,
         shortId: newShortId,
-        paymentStatus: PaymentStatus.Pending, // <--- EL CANDADO DE NEGOCIO
-        location: null,
-        locationTimestamp: null,
+        paymentStatus: PaymentStatus.Pending, // <--- EL CANDADO DE NEGOCIO (BLOQUEA MAPA)
+
+        // ASIGNAMOS LA UBICACIÓN DONDE SE HIZO EL TRATO
+        location: startLocation,
+        locationTimestamp: startLocation ? Date.now() : null,
+
         recoveryLocation: null,
         recoveryTimestamp: null,
-        recoveryLocationTimestamp: null, // Asegurar limpieza total
+        recoveryLocationTimestamp: null,
     });
 
     await batch.commit();

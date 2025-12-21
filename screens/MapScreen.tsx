@@ -3,10 +3,15 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { User } from 'firebase/auth';
-import { Item, ItemStatus } from '../types';
-import { subscribeToUserItems, subscribeToPublicReportedItems } from '../services/itemService';
+import { Item, ItemStatus, PaymentStatus } from '../types';
+import { subscribeToUserItems, subscribeToPublicReportedItems, updateItemLocationRealTime } from '../services/itemService';
 import Header from '../components/Header';
 import Spinner from '../components/Spinner';
+
+// NUEVO: CLUSTERING
+import MarkerClusterGroup from 'react-leaflet-markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 
 // Fix for default Leaflet marker icons in React
 import iconMarker from 'leaflet/dist/images/marker-icon.png';
@@ -36,6 +41,15 @@ const greenIcon = new L.Icon({
 
 const redIcon = new L.Icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const purpleIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -73,6 +87,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   const [publicItems, setPublicItems] = useState<Item[]>([]);
   const [displayedItems, setDisplayedItems] = useState<Item[]>([]);
 
+  // 1. OBTENER ID DEL DISPOSITIVO ACTUAL (Arquitectura IoT)
+  const currentDeviceId = localStorage.getItem('qr_device_id');
+
   const [filterMode, setFilterMode] = useState<'all' | 'alerts' | 'mine'>('all');
 
   // --- 1. SUBSCRIPCIONES REAL-TIME ---
@@ -82,17 +99,22 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     return () => { unsubMy(); unsubPublic(); };
   }, [user.uid]);
 
-  // --- 2. FILTRADO Y ACTUALIZACIÓN EN VIVO ---
+  // --- 2. FILTRADO Y ACTUALIZACIÓN EN VIVO (CANDADO DE PAGO) ---
   useEffect(() => {
     const allItemsMap = new Map<string, Item>();
 
+    const isPaid = (item: Item) => item.paymentStatus === PaymentStatus.Paid || item.paymentStatus === PaymentStatus.Free;
+
     if (filterMode === 'all') {
-      myItems.forEach(i => allItemsMap.set(i.qrId!, i));
+      // Mis items solo si están pagos
+      myItems.filter(isPaid).forEach(i => allItemsMap.set(i.qrId!, i));
+      // Alertas públicas siempre visibles
       publicItems.forEach(i => allItemsMap.set(i.qrId!, i));
     } else if (filterMode === 'mine') {
-      myItems.forEach(i => allItemsMap.set(i.qrId!, i));
+      myItems.filter(isPaid).forEach(i => allItemsMap.set(i.qrId!, i));
     } else if (filterMode === 'alerts') {
       publicItems.forEach(i => allItemsMap.set(i.qrId!, i));
+      // Mis items denunciados siempre visibles (emergencia)
       myItems.filter(i => i.status === ItemStatus.Denunciado).forEach(i => allItemsMap.set(i.qrId!, i));
     }
 
@@ -100,21 +122,42 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   }, [myItems, publicItems, filterMode]);
 
 
-  // --- 3. MI UBICACIÓN EN VIVO ---
+  // --- 3. TELEMETRÍA EN VIVO (ACTUALIZA FIRESTORE EN SILENCIO) ---
   useEffect(() => {
     if (navigator.geolocation) {
       const id = navigator.geolocation.watchPosition(
         (pos) => {
           const newPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
           setUserPos(newPos);
-          if (!initPos) setInitPos(newPos); // Set initial center once
+          if (!initPos) setInitPos(newPos);
+
+          // ACTUALIZACIÓN SILENCIOSA INTELIGENTE (Arquitectura de 3 Niveles)
+          myItems
+            .filter(item => {
+              // A. Debe estar pagado (o ser gratuito)
+              const isPaid = item.paymentStatus === PaymentStatus.Paid || item.paymentStatus === PaymentStatus.Free;
+
+              // B. Debe ser "SELF_DEVICE" (Rastreo activo por software)
+              const isSelf = item.trackingType === 'SELF_DEVICE';
+
+              // C. CRÍTICO: Debe ser ESTE dispositivo físico, no otro.
+              const isMyDevice = item.linkedDeviceId === currentDeviceId;
+
+              return isPaid && isSelf && isMyDevice;
+            })
+            .forEach(item => {
+              if (item.qrId) {
+                // Solo se mueven mis items activos vinculados a este celular
+                updateItemLocationRealTime(item.qrId, newPos.lat, newPos.lng);
+              }
+            });
         },
         (err) => console.warn(err),
-        { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 }
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
       );
       return () => navigator.geolocation.clearWatch(id);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [myItems, initPos, currentDeviceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   if (!initPos && !userPos) return <div className="h-full flex items-center justify-center bg-[#0d1226] text-white"><Spinner /></div>;
@@ -166,7 +209,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
 
           <MapUpdater center={userPos} />
 
-          {/* MI POSICIÓN (Blue Halo Circle Sim) */}
+          {/* MI POSICIÓN */}
           {userPos && (
             <Marker position={userPos} icon={new L.DivIcon({
               className: 'css-icon-user-loc',
@@ -183,43 +226,54 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
             })} />
           )}
 
-          {/* ITEMS MARKERS */}
-          {displayedItems.map(item => {
-            const isReported = item.status === ItemStatus.Denunciado;
+          {/* SOLUCIÓN AL BUG DE DUPLICACIÓN:
+             Agregamos la prop "key" que cambia cuando cambia el filtro.
+             Esto obliga a React a destruir y reconstruir el cluster group,
+             limpiando cualquier marcador fantasma.
+          */}
+          <MarkerClusterGroup chunkedLoading key={filterMode + displayedItems.length}>
+            {displayedItems.map(item => {
+              const isReported = item.status === ItemStatus.Denunciado;
 
-            let position: { lat: number, lng: number } | null = null;
-            if (isReported && item.location) position = item.location;
-            else if (!isReported && item.location) position = item.location;
-            else if (item.status === ItemStatus.Recuperado && item.recoveryLocation) position = item.recoveryLocation;
+              let position: { lat: number, lng: number } | null = null;
+              if (isReported && item.location) position = item.location;
+              else if (!isReported && item.location) position = item.location;
+              else if (item.status === ItemStatus.Recuperado && item.recoveryLocation) position = item.recoveryLocation;
 
-            if (!position) return null;
+              if (!position) return null;
 
-            return (
-              <Marker
-                key={item.qrId}
-                position={position}
-                icon={isReported ? redIcon : greenIcon}
-              >
-                <Popup>
-                  <div className="text-center font-sans">
-                    <h3 className="text-lg font-bold text-gray-800 m-0">{item.marca} {item.modelo}</h3>
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-2">{item.tipo}</p>
+              // Definición de icono según dueño y estado
+              let icon = greenIcon;
+              if (isReported) icon = redIcon;
+              if (item.ownerId !== user.uid) icon = purpleIcon;
 
-                    {isReported ? (
-                      <span className="bg-red-600 text-white py-1 px-3 rounded-full font-bold text-xs animate-pulse">
-                        🚨 ROBADO
-                      </span>
-                    ) : (
-                      <span className="bg-green-600 text-white py-1 px-3 rounded-full font-bold text-xs">
-                        ✔ A SALVO
-                      </span>
-                    )}
-                    <p className="mt-2 text-[10px] text-gray-400">ID: {item.shortId}</p>
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          })}
+              return (
+                <Marker
+                  key={item.qrId}
+                  position={position}
+                  icon={icon}
+                >
+                  <Popup>
+                    <div className="text-center font-sans">
+                      <h3 className="text-lg font-bold text-gray-800 m-0">{item.marca} {item.modelo}</h3>
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-2">{item.tipo}</p>
+
+                      {isReported ? (
+                        <span className="bg-red-600 text-white py-1 px-3 rounded-full font-bold text-xs animate-pulse">
+                          🚨 ROBADO
+                        </span>
+                      ) : (
+                        <span className="bg-green-600 text-white py-1 px-3 rounded-full font-bold text-xs">
+                          ✔ A SALVO
+                        </span>
+                      )}
+                      <p className="mt-2 text-[10px] text-gray-400">ID: {item.shortId}</p>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
+          </MarkerClusterGroup>
         </MapContainer>
 
         {/* BOTONES FLOTANTES (Estilo Imagen) */}

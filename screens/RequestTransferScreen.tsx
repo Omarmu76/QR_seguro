@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from 'firebase/auth';
-import { Item, TransferRequest, TransferStatus } from '../types';
+import { Item } from '../types';
 import { createTransferRequest } from '../services/itemService';
 import Spinner from '../components/Spinner';
 
@@ -20,7 +20,28 @@ const RequestTransferScreen: React.FC<RequestTransferScreenProps> = ({ item, use
     setIsLoading(true);
     setError(null);
     try {
-      await createTransferRequest(item, user);
+      // 1. CAPTURA DE GPS (Handshake Inicial)
+      let location = null;
+      if ("geolocation" in navigator) {
+        try {
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 7000,
+              maximumAge: 0
+            });
+          });
+          location = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+        } catch (e) {
+          console.log("GPS no disponible o denegado, enviando sin ubicación");
+        }
+      }
+
+      // 2. ENVIAR CON GPS
+      await createTransferRequest(item, user, location);
       setSuccess(true);
       // Esperamos un poco para que el usuario lea el mensaje de éxito
       setTimeout(() => {
