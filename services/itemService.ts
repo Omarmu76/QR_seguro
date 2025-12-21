@@ -1,6 +1,6 @@
 import {
     collection, addDoc, getDoc, getDocs, query, where, doc, deleteDoc, updateDoc,
-    writeBatch, serverTimestamp, orderBy, Timestamp, onSnapshot, Unsubscribe
+    writeBatch, serverTimestamp, Timestamp, onSnapshot, Unsubscribe
 } from "firebase/firestore";
 import { User } from 'firebase/auth';
 import { db } from "../firebaseConfig";
@@ -62,7 +62,9 @@ export const getItemByQrId = async (qrId: string): Promise<{ item: Item, status:
 
 export const getItemByShortId = async (shortId: string): Promise<{ item: Item, status: ItemStatus } | null> => {
     try {
-        const q = query(collection(db, "Items"), where("shortId", "==", shortId.toUpperCase()));
+        // Aseguramos mayúsculas y quitamos espacios por seguridad al buscar
+        const cleanId = shortId.trim().toUpperCase();
+        const q = query(collection(db, "Items"), where("shortId", "==", cleanId));
         const querySnapshot = await getDocs(q);
         if (querySnapshot.empty) return null;
         const docSnap = querySnapshot.docs[0];
@@ -272,14 +274,23 @@ export const createTransferRequest = async (item: Item, buyer: User): Promise<Tr
 export const getPendingTransfers = async (sellerId: string): Promise<TransferRequest[]> => {
     try {
         const transfersRef = collection(db, "Transfers");
+        // FIX: Eliminamos 'orderBy' de la query para evitar error de índice
         const q = query(transfersRef,
             where("sellerId", "==", sellerId),
-            where("status", "==", TransferStatus.Pending),
-            orderBy("createdAt", "desc")
+            where("status", "==", TransferStatus.Pending)
         );
         const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: (doc.data().createdAt as Timestamp)?.toMillis() || Date.now() } as TransferRequest));
+
+        // Ordenamos en memoria (Javascript)
+        const requests = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: (doc.data().createdAt as Timestamp)?.toMillis() || Date.now()
+        } as TransferRequest));
+
+        return requests.sort((a, b) => b.createdAt - a.createdAt); // Orden descendente
     } catch (error) {
+        console.error(error);
         throw new Error("Error fetching pending transfers.");
     }
 };
@@ -287,13 +298,21 @@ export const getPendingTransfers = async (sellerId: string): Promise<TransferReq
 export const getSentTransfers = async (buyerId: string): Promise<TransferRequest[]> => {
     try {
         const transfersRef = collection(db, "Transfers");
+        // FIX: Eliminamos 'orderBy' de la query
         const q = query(transfersRef,
-            where("buyerId", "==", buyerId),
-            orderBy("createdAt", "desc")
+            where("buyerId", "==", buyerId)
         );
         const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: (doc.data().createdAt as Timestamp)?.toMillis() || Date.now() } as TransferRequest));
+
+        const requests = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: (doc.data().createdAt as Timestamp)?.toMillis() || Date.now()
+        } as TransferRequest));
+
+        return requests.sort((a, b) => b.createdAt - a.createdAt);
     } catch (error) {
+        console.error(error);
         throw new Error("Error fetching sent transfers.");
     }
 };
