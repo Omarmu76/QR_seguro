@@ -1,11 +1,13 @@
 
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  GoogleAuthProvider, 
-  signInWithPopup, 
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
   signOut,
   onAuthStateChanged as onFirebaseAuthStateChanged,
+  sendEmailVerification,
+  updatePassword,
   User
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
@@ -47,7 +49,7 @@ export const signInWithGoogle = async (): Promise<User> => {
   try {
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
-     // Save user info to Firestore if they are new
+    // Save user info to Firestore if they are new
     await setDoc(doc(db, "Users", user.uid), {
       userId: user.uid,
       email: user.email,
@@ -75,4 +77,24 @@ export const signOutUser = async (): Promise<void> => {
 
 export const onAuthStateChange = (callback: (user: User | null) => void) => {
   return onFirebaseAuthStateChanged(auth, callback);
+};
+
+// --- NUEVAS FUNCIONES PARA PERFIL Y VERIFICACIÓN ---
+
+export const sendVerificationEmail = async (user: User): Promise<void> => {
+  try {
+    await sendEmailVerification(user);
+  } catch (error) {
+    console.error("Error sending verification email:", error);
+    throw error;
+  }
+};
+
+export const updateUserPassword = async (user: User, newPass: string): Promise<void> => {
+  try {
+    await updatePassword(user, newPass);
+  } catch (error) {
+    console.error("Error updating password:", error);
+    throw error;
+  }
 };

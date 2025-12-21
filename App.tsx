@@ -25,6 +25,9 @@ import PaymentScreen from './screens/PaymentScreen';
 import AdminPaymentsScreen from './screens/AdminPaymentsScreen';
 
 // Componentes
+import UserProfileModal from './components/UserProfileModal';
+
+// Componentes
 import BottomNavBar from './components/BottomNavBar';
 import Spinner from './components/Spinner';
 import SideMenu from './components/SideMenu';
@@ -37,6 +40,7 @@ const App: React.FC = () => {
   const [activeScreen, setActiveScreen] = useState<Screen>(Screen.Home);
   const [modal, setModal] = useState<Screen | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
 
   // Estados de Memoria
   const [scanResult, setScanResult] = useState<{ item: Item; status: ItemStatus } | null>(null);
@@ -160,6 +164,7 @@ const App: React.FC = () => {
           onScanRequest={handleMenuScanRequest}
           onInputCodeRequest={handleMenuInputCodeRequest}
           onPublicNavigate={navigate}
+          onProfileRequest={() => setShowProfile(true)}
           user={user}
         />
 
@@ -170,6 +175,10 @@ const App: React.FC = () => {
         <div className="flex-grow overflow-y-auto">{renderActiveScreen()}</div>
         {!generatedItem && <BottomNavBar activeScreen={activeScreen} setActiveScreen={handleAppNavigate} />}
         {renderModal()}
+
+        {showProfile && user && (
+          <UserProfileModal user={user} onClose={() => setShowProfile(false)} />
+        )}
       </div>
     </div>
   );

@@ -20,18 +20,18 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
     try {
       await signUpWithEmail(nombre, email, password);
     } catch (err: any) {
-        if (err.code === 'auth/email-already-in-use') {
-            setError('Este email ya está registrado.');
-        } else if (err.code === 'auth/weak-password') {
-            setError('La contraseña debe tener al menos 6 caracteres.');
-        } else {
-            setError('Ocurrió un error al registrarse.');
-        }
+      if (err.code === 'auth/email-already-in-use') {
+        setError('Este email ya está registrado. Si tienes cuenta en ComprAren, usa las mismas credenciales para Iniciar Sesión aquí.');
+      } else if (err.code === 'auth/weak-password') {
+        setError('La contraseña debe tener al menos 6 caracteres.');
+      } else {
+        setError('Ocurrió un error al registrarse. Intenta nuevamente.');
+      }
     } finally {
       setIsLoading(false);
     }
   };
-  
+
   const handleGoogleLogin = async () => {
     setError('');
     setIsLoading(true);
@@ -39,11 +39,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
       await signInWithGoogle();
     } catch (err: any) {
       console.error("Google Login Error:", err); // Para ver el error completo en la consola
-      
+
       if (err.code === 'auth/popup-closed-by-user') {
         setError('Inicio de sesión cancelado.');
       } else if (err.code === 'auth/unauthorized-domain') {
-          setError('El dominio de esta app no está autorizado. Revisa Firebase.');
+        setError('El dominio de esta app no está autorizado. Revisa Firebase.');
       } else {
         setError('No se pudo iniciar sesión con Google.');
       }
@@ -77,7 +77,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
           </button>
         </div>
       </form>
-       <div className="relative my-6">
+      <div className="relative my-6">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-gray-600"></div>
         </div>
@@ -86,7 +86,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
         </div>
       </div>
       <button onClick={handleGoogleLogin} disabled={isLoading} className="w-full bg-white text-gray-700 py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center space-x-2 hover:bg-gray-200 disabled:bg-gray-400 transition-colors">
-        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" className="w-5 h-5"/>
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" className="w-5 h-5" />
         <span>Entrar con Google</span>
       </button>
       <p className="mt-8 text-center text-gray-400">

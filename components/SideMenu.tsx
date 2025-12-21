@@ -9,6 +9,7 @@ interface SideMenuProps {
   onScanRequest: () => void;
   onInputCodeRequest: () => void;
   onPublicNavigate: (path: string) => void;
+  onProfileRequest: () => void;
   user: User | null;
 }
 
@@ -25,6 +26,7 @@ const SideMenu: React.FC<SideMenuProps> = ({
   onScanRequest,
   onInputCodeRequest,
   onPublicNavigate,
+  onProfileRequest,
   user
 }) => {
 
@@ -50,6 +52,16 @@ const SideMenu: React.FC<SideMenuProps> = ({
         </div>
 
         <div className="flex-grow overflow-y-auto py-2">
+          <button onClick={() => { onProfileRequest(); onClose(); }} className="w-full text-left py-4 px-4 bg-[#1a233a] hover:bg-[#25304d] text-yellow-400 transition-colors flex items-center gap-3 border-b border-gray-700">
+            <div className="w-8 h-8 rounded-full bg-yellow-500 text-black flex items-center justify-center font-bold text-sm">
+              {user?.email?.charAt(0).toUpperCase() || "U"}
+            </div>
+            <div className="flex flex-col">
+              <span className="font-bold text-sm">MI PERFIL</span>
+              <span className="text-[10px] text-gray-400 truncate w-32">{user?.email}</span>
+            </div>
+          </button>
+
           <button onClick={() => onNavigate(Screen.Home)} className={menuBtnClass}>
             <span className="text-xl">🏠</span> INICIO
           </button>
