@@ -35,8 +35,8 @@ const getRobustLocation = (): Promise<{ lat: number, lng: number }> => {
         setTimeout(() => {
           navigator.geolocation.getCurrentPosition(
             (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-            (_errFinal) => reject(new Error("No se pudo obtener GPS. Activa la ubicación y sal al exterior.")),
-            options
+            (_errFinal) => reject(new Error("No se pudo obtener GPS. Intenta activar WiFi o salir al exterior.")),
+            { enableHighAccuracy: false, timeout: 20000, maximumAge: 0 } // <--- ESTO SOLUCIONA EL ERROR EN PC
           );
         }, 1000);
       },

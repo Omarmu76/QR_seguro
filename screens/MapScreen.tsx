@@ -85,12 +85,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   // Real-time Items State
   const [myItems, setMyItems] = useState<Item[]>([]);
   const [publicItems, setPublicItems] = useState<Item[]>([]);
-  const [displayedItems, setDisplayedItems] = useState<Item[]>([]);
+  const [filterMode, setFilterMode] = useState<'all' | 'alerts' | 'mine'>('all');
 
   // 1. OBTENER ID DEL DISPOSITIVO ACTUAL (Arquitectura IoT)
   const currentDeviceId = localStorage.getItem('qr_device_id');
-
-  const [filterMode, setFilterMode] = useState<'all' | 'alerts' | 'mine'>('all');
 
   // --- 1. SUBSCRIPCIONES REAL-TIME ---
   useEffect(() => {
@@ -99,10 +97,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     return () => { unsubMy(); unsubPublic(); };
   }, [user.uid]);
 
-  // --- 2. FILTRADO Y ACTUALIZACIÓN EN VIVO (CANDADO DE PAGO) ---
-  useEffect(() => {
+  // --- 2. FILTRADO Y ACTUALIZACIÓN EN VIVO (CON useMemo PARA EVITAR GHOST MARKERS) ---
+  const displayedItems = React.useMemo(() => {
     const allItemsMap = new Map<string, Item>();
-
     const isPaid = (item: Item) => item.paymentStatus === PaymentStatus.Paid || item.paymentStatus === PaymentStatus.Free;
 
     if (filterMode === 'all') {
@@ -113,12 +110,16 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     } else if (filterMode === 'mine') {
       myItems.filter(isPaid).forEach(i => allItemsMap.set(i.qrId!, i));
     } else if (filterMode === 'alerts') {
-      publicItems.forEach(i => allItemsMap.set(i.qrId!, i));
-      // Mis items denunciados siempre visibles (emergencia)
-      myItems.filter(i => i.status === ItemStatus.Denunciado).forEach(i => allItemsMap.set(i.qrId!, i));
-    }
+      // Filtrado Estricto: Solo Denunciados (Rojos)
+      publicItems
+        .filter(i => i.status === ItemStatus.Denunciado)
+        .forEach(i => allItemsMap.set(i.qrId!, i));
 
-    setDisplayedItems(Array.from(allItemsMap.values()));
+      myItems
+        .filter(i => i.status === ItemStatus.Denunciado)
+        .forEach(i => allItemsMap.set(i.qrId!, i));
+    }
+    return Array.from(allItemsMap.values());
   }, [myItems, publicItems, filterMode]);
 
 
@@ -226,12 +227,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
             })} />
           )}
 
-          {/* SOLUCIÓN AL BUG DE DUPLICACIÓN:
-             Agregamos la prop "key" que cambia cuando cambia el filtro.
-             Esto obliga a React a destruir y reconstruir el cluster group,
-             limpiando cualquier marcador fantasma.
-          */}
-          <MarkerClusterGroup chunkedLoading key={filterMode + displayedItems.length}>
+          <MarkerClusterGroup chunkedLoading key={filterMode}>
             {displayedItems.map(item => {
               const isReported = item.status === ItemStatus.Denunciado;
 
