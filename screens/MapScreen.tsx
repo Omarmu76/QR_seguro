@@ -84,6 +84,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
 
   // 1. AGREGAR ESTA REFERENCIA AL INICIO DEL COMPONENTE (Freno de GPS)
   const lastUpdateRef = React.useRef<number>(0);
+  const lastSavedPosRef = React.useRef<{ lat: number, lng: number } | null>(null); // NUEVA REF PARA DISTANCIA
 
   // Real-time Items State
   const [myItems, setMyItems] = useState<Item[]>([]);
@@ -137,29 +138,51 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
           lastUpdateRef.current = now;
 
           const newPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+
+          // SIEMPRE actualizamos el punto azul (Feedback visual local para el usuario)
           setUserPos(newPos);
           if (!initPos) setInitPos(newPos);
 
-          // ACTUALIZACIÓN SILENCIOSA INTELIGENTE (Arquitectura de 3 Niveles)
-          myItems
-            .filter(item => {
-              // A. Debe estar pagado (o ser gratuito)
-              const isPaid = item.paymentStatus === PaymentStatus.Paid || item.paymentStatus === PaymentStatus.Free;
+          // 2. FRENO DE DISTANCIA (Anti-Parpadeo)
+          // Solo escribimos en BD si nos movimos más de 10 metros respecto a la última escritura
+          let shouldUpdateDB = false;
 
-              // B. Debe ser "SELF_DEVICE" (Rastreo activo por software)
-              const isSelf = item.trackingType === 'SELF_DEVICE';
+          if (!lastSavedPosRef.current) {
+            shouldUpdateDB = true; // Primera vez
+          } else {
+            const dist = getDistanceInMeters(
+              lastSavedPosRef.current.lat, lastSavedPosRef.current.lng,
+              newPos.lat, newPos.lng
+            );
+            if (dist > 10) { // UMBRAL DE 10 METROS
+              shouldUpdateDB = true;
+            }
+          }
 
-              // C. CRÍTICO: Debe ser ESTE dispositivo físico, no otro.
-              const isMyDevice = item.linkedDeviceId === currentDeviceId;
+          if (shouldUpdateDB) {
+            lastSavedPosRef.current = newPos; // Guardamos esta como la última válida
 
-              return isPaid && isSelf && isMyDevice;
-            })
-            .forEach(item => {
-              if (item.qrId) {
-                // Solo se mueven mis items activos vinculados a este celular
-                updateItemLocationRealTime(item.qrId, newPos.lat, newPos.lng);
-              }
-            });
+            // ACTUALIZACIÓN SILENCIOSA INTELIGENTE (Arquitectura de 3 Niveles)
+            myItems
+              .filter(item => {
+                // A. Debe estar pagado (o ser gratuito)
+                const isPaid = item.paymentStatus === PaymentStatus.Paid || item.paymentStatus === PaymentStatus.Free;
+
+                // B. Debe ser "SELF_DEVICE" (Rastreo activo por software)
+                const isSelf = item.trackingType === 'SELF_DEVICE';
+
+                // C. CRÍTICO: Debe ser ESTE dispositivo físico, no otro.
+                const isMyDevice = item.linkedDeviceId === currentDeviceId;
+
+                return isPaid && isSelf && isMyDevice;
+              })
+              .forEach(item => {
+                if (item.qrId) {
+                  // Solo se mueven mis items activos vinculados a este celular
+                  updateItemLocationRealTime(item.qrId, newPos.lat, newPos.lng);
+                }
+              });
+          }
         },
         (err) => console.warn(err),
         { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
@@ -311,6 +334,18 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
       </div>
     </div>
   );
+};
+
+// Fórmula de Haversine para calcular distancia en metros
+const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371e3; // Radio de la tierra en metros
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 };
 
 export default MapScreen;
