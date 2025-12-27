@@ -82,6 +82,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
   const [initPos, setInitPos] = useState<{ lat: number; lng: number } | null>(null);
 
+  // 1. AGREGAR ESTA REFERENCIA AL INICIO DEL COMPONENTE (Freno de GPS)
+  const lastUpdateRef = React.useRef<number>(0);
+
   // Real-time Items State
   const [myItems, setMyItems] = useState<Item[]>([]);
   const [publicItems, setPublicItems] = useState<Item[]>([]);
@@ -128,6 +131,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     if (navigator.geolocation) {
       const id = navigator.geolocation.watchPosition(
         (pos) => {
+          // 2. AGREGAR ESTE BLOQUE DE FRENO (THROTTLING)
+          const now = Date.now();
+          if (now - lastUpdateRef.current < 5000) return; // Si pasaron menos de 5 seg, IGNORAR.
+          lastUpdateRef.current = now;
+
           const newPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
           setUserPos(newPos);
           if (!initPos) setInitPos(newPos);
