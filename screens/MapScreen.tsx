@@ -168,6 +168,51 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     }
   }, [myItems, initPos, currentDeviceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // --- 4. MEMOIZACIÓN DE MARCADORES (Estabilización Final - DEBE IR ANTES DEL RETURN CONDICIONAL) ---
+  const markerElements = React.useMemo(() => {
+    return displayedItems.map(item => {
+      const isReported = item.status === ItemStatus.Denunciado;
+
+      let position: { lat: number, lng: number } | null = null;
+      if (isReported && item.location) position = item.location;
+      else if (!isReported && item.location) position = item.location;
+      else if (item.status === ItemStatus.Recuperado && item.recoveryLocation) position = item.recoveryLocation;
+
+      if (!position) return null;
+
+      // Definición de icono según dueño y estado
+      let icon = greenIcon;
+      if (isReported) icon = redIcon;
+      if (item.ownerId !== user.uid) icon = purpleIcon;
+
+      return (
+        <Marker
+          key={item.qrId}
+          position={position}
+          icon={icon}
+        >
+          <Popup>
+            <div className="text-center font-sans">
+              <h3 className="text-lg font-bold text-gray-800 m-0">{item.marca} {item.modelo}</h3>
+              <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-2">{item.tipo}</p>
+
+              {isReported ? (
+                <span className="bg-red-600 text-white py-1 px-3 rounded-full font-bold text-xs animate-pulse">
+                  🚨 ROBADO
+                </span>
+              ) : (
+                <span className="bg-green-600 text-white py-1 px-3 rounded-full font-bold text-xs">
+                  ✔ A SALVO
+                </span>
+              )}
+              <p className="mt-2 text-[10px] text-gray-400">ID: {item.shortId}</p>
+            </div>
+          </Popup>
+        </Marker>
+      );
+    });
+  }, [displayedItems, user.uid, redIcon, greenIcon, purpleIcon]); // Agregué los iconos a la dependencia por seguridad linter
+
 
   if (!initPos && !userPos) return <div className="h-full flex items-center justify-center bg-[#0d1226] text-white"><Spinner /></div>;
 
@@ -236,47 +281,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
           )}
 
           <MarkerClusterGroup chunkedLoading key={filterMode}>
-            {displayedItems.map(item => {
-              const isReported = item.status === ItemStatus.Denunciado;
-
-              let position: { lat: number, lng: number } | null = null;
-              if (isReported && item.location) position = item.location;
-              else if (!isReported && item.location) position = item.location;
-              else if (item.status === ItemStatus.Recuperado && item.recoveryLocation) position = item.recoveryLocation;
-
-              if (!position) return null;
-
-              // Definición de icono según dueño y estado
-              let icon = greenIcon;
-              if (isReported) icon = redIcon;
-              if (item.ownerId !== user.uid) icon = purpleIcon;
-
-              return (
-                <Marker
-                  key={item.qrId}
-                  position={position}
-                  icon={icon}
-                >
-                  <Popup>
-                    <div className="text-center font-sans">
-                      <h3 className="text-lg font-bold text-gray-800 m-0">{item.marca} {item.modelo}</h3>
-                      <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-2">{item.tipo}</p>
-
-                      {isReported ? (
-                        <span className="bg-red-600 text-white py-1 px-3 rounded-full font-bold text-xs animate-pulse">
-                          🚨 ROBADO
-                        </span>
-                      ) : (
-                        <span className="bg-green-600 text-white py-1 px-3 rounded-full font-bold text-xs">
-                          ✔ A SALVO
-                        </span>
-                      )}
-                      <p className="mt-2 text-[10px] text-gray-400">ID: {item.shortId}</p>
-                    </div>
-                  </Popup>
-                </Marker>
-              );
-            })}
+            {markerElements}
           </MarkerClusterGroup>
         </MapContainer>
 
