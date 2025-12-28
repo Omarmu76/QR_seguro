@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -8,7 +8,7 @@ import { subscribeToUserItems, subscribeToPublicReportedItems, updateItemLocatio
 import Header from '../components/Header';
 import Spinner from '../components/Spinner';
 
-// NUEVO: CLUSTERING
+// CLUSTERING
 import MarkerClusterGroup from 'react-leaflet-markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
@@ -62,10 +62,8 @@ const MapUpdater = ({ center }: { center: { lat: number, lng: number } | null })
   const map = useMap();
   useEffect(() => {
     if (center) {
-      // Smooth fly to user location on initial load or if requested
-      // We can disable this if we want free movement, but for "Uber-like" tracking usually we keep user in view or just let them pan.
-      // For now, let's just pan once if needed? checking distance?
-      // simpler: map.setView(center);
+      // Opcional: Centrar mapa al inicio.
+      // map.setView(center);
     }
   }, [center, map]);
   return null;
@@ -82,42 +80,44 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
   const [initPos, setInitPos] = useState<{ lat: number; lng: number } | null>(null);
 
-  // 1. AGREGAR ESTA REFERENCIA AL INICIO DEL COMPONENTE (Freno de GPS)
-  const lastUpdateRef = React.useRef<number>(0);
+  // 1. FRENO DE GPS (THROTTLING) - Evita parpadeo
+  const lastUpdateRef = useRef<number>(0);
 
   // Real-time Items State
   const [myItems, setMyItems] = useState<Item[]>([]);
   const [publicItems, setPublicItems] = useState<Item[]>([]);
   const [filterMode, setFilterMode] = useState<'all' | 'alerts' | 'mine'>('all');
 
-  // 1. OBTENER ID DEL DISPOSITIVO ACTUAL (Arquitectura IoT)
+  // 2. REF ESPEJO PARA ITEMS (CRÍTICO: Evita reinicio del GPS)
+  const myItemsRef = useRef<Item[]>([]);
+
+  // 3. OBTENER ID DEL DISPOSITIVO
   const currentDeviceId = localStorage.getItem('qr_device_id');
 
   // --- 1. SUBSCRIPCIONES REAL-TIME ---
   useEffect(() => {
-    const unsubMy = subscribeToUserItems(user.uid, (items) => setMyItems(items));
+    const unsubMy = subscribeToUserItems(user.uid, (items) => {
+      setMyItems(items);
+      myItemsRef.current = items; // Mantiene la referencia sincronizada sin romper el watcher
+    });
     const unsubPublic = subscribeToPublicReportedItems((items) => setPublicItems(items));
     return () => { unsubMy(); unsubPublic(); };
   }, [user.uid]);
 
-  // --- 2. FILTRADO Y ACTUALIZACIÓN EN VIVO (CON useMemo PARA EVITAR GHOST MARKERS) ---
-  const displayedItems = React.useMemo(() => {
+  // --- 2. FILTRADO Y MEMOIZACIÓN (VISUAL) ---
+  const displayedItems = useMemo(() => {
     const allItemsMap = new Map<string, Item>();
     const isPaid = (item: Item) => item.paymentStatus === PaymentStatus.Paid || item.paymentStatus === PaymentStatus.Free;
 
     if (filterMode === 'all') {
-      // Mis items solo si están pagos
       myItems.filter(isPaid).forEach(i => allItemsMap.set(i.qrId!, i));
-      // Alertas públicas siempre visibles
       publicItems.forEach(i => allItemsMap.set(i.qrId!, i));
     } else if (filterMode === 'mine') {
       myItems.filter(isPaid).forEach(i => allItemsMap.set(i.qrId!, i));
     } else if (filterMode === 'alerts') {
-      // Filtrado Estricto: Solo Denunciados (Rojos)
       publicItems
         .filter(i => i.status === ItemStatus.Denunciado)
         .forEach(i => allItemsMap.set(i.qrId!, i));
-
       myItems
         .filter(i => i.status === ItemStatus.Denunciado)
         .forEach(i => allItemsMap.set(i.qrId!, i));
@@ -126,50 +126,51 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   }, [myItems, publicItems, filterMode]);
 
 
-  // --- 3. TELEMETRÍA EN VIVO (ACTUALIZA FIRESTORE EN SILENCIO) ---
+  // --- 3. TELEMETRÍA EN VIVO (GPS PERSISTENTE) ---
   useEffect(() => {
     if (navigator.geolocation) {
+      // Iniciamos el GPS una sola vez. No depende de 'myItems'.
       const id = navigator.geolocation.watchPosition(
         (pos) => {
-          // 2. AGREGAR ESTE BLOQUE DE FRENO (THROTTLING)
           const now = Date.now();
-          if (now - lastUpdateRef.current < 5000) return; // Si pasaron menos de 5 seg, IGNORAR.
+
+          // A. FRENO DE TIEMPO (5 segundos) - Evita el parpadeo visual en iPhone
+          if (now - lastUpdateRef.current < 5000) return;
           lastUpdateRef.current = now;
 
           const newPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+
+          // Actualización Visual Local
           setUserPos(newPos);
           if (!initPos) setInitPos(newPos);
 
-          // ACTUALIZACIÓN SILENCIOSA INTELIGENTE (Arquitectura de 3 Niveles)
-          myItems
+          // B. ACTUALIZACIÓN DE BD (Leemos desde la REF para no reiniciar el sensor)
+          myItemsRef.current
             .filter(item => {
-              // A. Debe estar pagado (o ser gratuito)
               const isPaid = item.paymentStatus === PaymentStatus.Paid || item.paymentStatus === PaymentStatus.Free;
-
-              // B. Debe ser "SELF_DEVICE" (Rastreo activo por software)
               const isSelf = item.trackingType === 'SELF_DEVICE';
-
-              // C. CRÍTICO: Debe ser ESTE dispositivo físico, no otro.
               const isMyDevice = item.linkedDeviceId === currentDeviceId;
 
               return isPaid && isSelf && isMyDevice;
             })
             .forEach(item => {
               if (item.qrId) {
-                // Solo se mueven mis items activos vinculados a este celular
+                // Se actualiza cada 5 segundos de forma fluida
                 updateItemLocationRealTime(item.qrId, newPos.lat, newPos.lng);
               }
             });
         },
-        (err) => console.warn(err),
-        { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+        (err) => console.warn("GPS Error:", err),
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
       );
+
       return () => navigator.geolocation.clearWatch(id);
     }
-  }, [myItems, initPos, currentDeviceId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentDeviceId]); // <--- DEPENDENCIA ÚNICA: El GPS no se apaga nunca.
 
-  // --- 4. MEMOIZACIÓN DE MARCADORES (Estabilización Final - DEBE IR ANTES DEL RETURN CONDICIONAL) ---
-  const markerElements = React.useMemo(() => {
+
+  // --- 4. MEMOIZACIÓN DE MARCADORES (Estabilización Visual) ---
+  const markerElements = useMemo(() => {
     return displayedItems.map(item => {
       const isReported = item.status === ItemStatus.Denunciado;
 
@@ -180,7 +181,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
 
       if (!position) return null;
 
-      // Definición de icono según dueño y estado
       let icon = greenIcon;
       if (isReported) icon = redIcon;
       if (item.ownerId !== user.uid) icon = purpleIcon;
@@ -211,7 +211,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
         </Marker>
       );
     });
-  }, [displayedItems, user.uid, redIcon, greenIcon, purpleIcon]); // Agregué los iconos a la dependencia por seguridad linter
+  }, [displayedItems, user.uid]);
 
 
   if (!initPos && !userPos) return <div className="h-full flex items-center justify-center bg-[#0d1226] text-white"><Spinner /></div>;
@@ -222,9 +222,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     <div className="flex flex-col h-full bg-[#0d1226] relative">
       <Header title="MAPA GLOBAL" onMenuClick={onMenuClick} />
 
-      {/* FILTROS SUPERIORES (Estilo Imagen) */}
+      {/* FILTROS SUPERIORES */}
       <div className="absolute top-20 left-0 right-0 z-[1000] flex justify-center gap-2 px-4 overflow-x-auto pb-2 pointer-events-none">
-        <div className="pointer-events-auto flex gap-2"> {/* Wrapper for pointer events */}
+        <div className="pointer-events-auto flex gap-2">
           <button
             onClick={() => setFilterMode('all')}
             className={`px-4 py-2 rounded-full font-bold text-sm shadow-md flex items-center gap-2 transition-all ${filterMode === 'all' ? 'bg-white text-blue-900 ring-2 ring-blue-300' : 'bg-white/90 text-gray-600'
@@ -254,7 +254,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
           center={center}
           zoom={15}
           style={{ height: '100%', width: '100%' }}
-          zoomControl={false} // Custom or none, map usually has defaults. standard is fine.
+          zoomControl={false}
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -285,19 +285,17 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
           </MarkerClusterGroup>
         </MapContainer>
 
-        {/* BOTONES FLOTANTES (Estilo Imagen) */}
+        {/* BOTONES FLOTANTES */}
         <div className="absolute bottom-8 right-4 z-[1000] flex flex-col gap-4">
-          {/* QR Scanner */}
           <button
             onClick={onScanRequest}
             className="w-14 h-14 bg-[#2d3748] rounded-full flex items-center justify-center shadow-2xl border-2 border-gray-600 hover:scale-105 transition-transform"
           >
             <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
             </svg>
           </button>
 
-          {/* Camera / Action (Yellow) */}
           <button
             onClick={onInputCodeRequest}
             className="w-16 h-16 bg-yellow-500 rounded-full flex items-center justify-center shadow-2xl border-4 border-[#2d3748] hover:bg-yellow-400 hover:scale-110 transition-all"
