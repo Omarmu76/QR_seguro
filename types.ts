@@ -79,6 +79,7 @@ export interface Item {
   description?: string;
   status: ItemStatus;
   paymentStatus?: PaymentStatus;
+  color?: string; // <--- NUEVO: Color del artículo
 
   // Datos de Geolocalización
   location?: { lat: number; lng: number } | null;
@@ -97,6 +98,7 @@ export interface Item {
   paymentAmount?: number;
   paymentTransactionId?: string;
   lastPaymentDate?: any;
+  reward?: number; // <--- NUEVO: Recompensa por recuperación
 }
 
 export interface PaymentNotification {

@@ -232,26 +232,31 @@ export const updateItemLocation = async (itemId: string, userId: string, locatio
     } catch (error) { throw error; }
 };
 
-export const updateItemDetails = async (itemId: string, userId: string, newData: { tipo: string; marca: string; modelo: string; }): Promise<void> => {
+export const updateItem = async (itemId: string, data: Partial<Item>): Promise<void> => {
     try {
         const docRef = doc(db, "Items", itemId);
-        const docSnap = await getDoc(docRef);
-        if (!docSnap.exists()) throw new Error("Item not found.");
-        const itemData = docSnap.data() as Item;
-        if (itemData.ownerId !== userId) throw new Error("Permission denied.");
-        await updateDoc(docRef, { tipo: newData.tipo, marca: newData.marca, modelo: newData.modelo });
-    } catch (error) { throw error; }
+        await updateDoc(docRef, data);
+    } catch (error) {
+        console.error("Error updating item:", error);
+        throw error;
+    }
 };
 
-export const deleteItem = async (qrId: string, userId: string): Promise<void> => {
+export const deleteItem = async (qrId: string, userId?: string): Promise<void> => {
     try {
         const docRef = doc(db, "Items", qrId);
-        const docSnap = await getDoc(docRef);
-        if (!docSnap.exists()) throw new Error("Item not found.");
-        const itemData = docSnap.data() as Item;
-        if (itemData.ownerId !== userId) throw new Error("Permission denied.");
+        if (userId) {
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                const itemData = docSnap.data() as Item;
+                if (itemData.ownerId !== userId) throw new Error("Permission denied.");
+            }
+        }
         await deleteDoc(docRef);
-    } catch (error) { throw error; }
+    } catch (error) {
+        console.error("Error deleting item:", error);
+        throw error;
+    }
 };
 
 // --- TRANSFERENCIAS (LÓGICA CORREGIDA Y FUNCIONAL) ---
