@@ -10,6 +10,7 @@ interface SideMenuProps {
   onInputCodeRequest: () => void;
   onPublicNavigate: (path: string) => void;
   onProfileRequest: () => void;
+  onTermsRequest: () => void; // NUEVA PROP
   user: User | null;
 }
 
@@ -27,6 +28,7 @@ const SideMenu: React.FC<SideMenuProps> = ({
   onInputCodeRequest,
   onPublicNavigate,
   onProfileRequest,
+  onTermsRequest,
   user
 }) => {
 
@@ -73,6 +75,11 @@ const SideMenu: React.FC<SideMenuProps> = ({
           </button>
           <button onClick={() => onNavigate(Screen.TRANSFERS)} className={menuBtnClass}>
             <span className="text-xl">🤝</span> TRANSFERENCIAS
+          </button>
+
+          <div className="my-2 border-t border-gray-700 mx-4"></div>
+          <button onClick={() => { onTermsRequest(); onClose(); }} className={menuBtnClass}>
+            <span className="text-xl">⚖️</span> LEGALES Y PRIVACIDAD
           </button>
 
           <div className="my-2 border-t border-gray-700 mx-4"></div>

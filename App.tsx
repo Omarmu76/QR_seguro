@@ -26,6 +26,7 @@ import AdminPaymentsScreen from './screens/AdminPaymentsScreen';
 
 // Componentes
 import UserProfileModal from './components/UserProfileModal';
+import TermsModal from './components/common/TermsModal';
 
 // Componentes
 import BottomNavBar from './components/BottomNavBar';
@@ -41,6 +42,7 @@ const App: React.FC = () => {
   const [modal, setModal] = useState<Screen | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   // Estados de Memoria
   const [scanResult, setScanResult] = useState<{ item: Item; status: ItemStatus } | null>(null);
@@ -138,7 +140,7 @@ const App: React.FC = () => {
       case Screen.InputCode: return <InputCodeScreen onScanComplete={handleScanComplete} onCancel={closeModal} />;
       case Screen.ScanResult: return scanResult ? <ResultScreen result={scanResult} onClose={closeModal} /> : null;
       case Screen.REQUEST_TRANSFER: return itemToTransfer ? <RequestTransferScreen item={itemToTransfer} user={user!} onCancel={closeModal} onRequestSent={closeModal} /> : null;
-      case Screen.EditItem: return itemToEdit ? <EditItemScreen item={itemToEdit} user={user!} onEditComplete={handleEditComplete} onCancel={closeModal} /> : null;
+      case Screen.EditItem: return itemToEdit ? <EditItemScreen item={itemToEdit} onEditComplete={handleEditComplete} onCancel={closeModal} /> : null;
       case Screen.ItemDetail: return itemToView ? <ItemDetailScreen item={itemToView} onDone={closeModal} /> : null;
       case Screen.PAYMENT_MODAL: return itemToActivate ? <PaymentScreen item={itemToActivate} user={user!} onActivationComplete={handleActivationComplete} onCancel={closeModal} /> : null;
       default: return null;
@@ -165,6 +167,7 @@ const App: React.FC = () => {
           onInputCodeRequest={handleMenuInputCodeRequest}
           onPublicNavigate={navigate}
           onProfileRequest={() => setShowProfile(true)}
+          onTermsRequest={() => setShowTerms(true)}
           user={user}
         />
 
@@ -179,6 +182,8 @@ const App: React.FC = () => {
         {showProfile && user && (
           <UserProfileModal user={user} onClose={() => setShowProfile(false)} />
         )}
+
+        {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
       </div>
     </div>
   );

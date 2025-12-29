@@ -345,37 +345,56 @@ export const getSentTransfers = async (buyerId: string): Promise<TransferRequest
 };
 
 export const approveTransfer = async (transferId: string, itemId: string, buyerId: string) => {
-    const batch = writeBatch(db);
+    try {
+        // 1. Recuperar datos de la solicitud y del item original
+        const transferRef = doc(db, "Transfers", transferId);
+        const transferSnap = await getDoc(transferRef);
+        const transferData = transferSnap.exists() ? transferSnap.data() as TransferRequest : null;
+        const startLocation = transferData?.buyerLocation || null;
 
-    // 1. Recuperar la ubicación inicial capturada en la solicitud (Handshake)
-    const transferRef = doc(db, "Transfers", transferId);
-    const transferSnap = await getDoc(transferRef);
-    const transferData = transferSnap.exists() ? transferSnap.data() as TransferRequest : null;
-    const startLocation = transferData?.buyerLocation || null;
+        const itemRef = doc(db, "Items", itemId);
+        const itemSnap = await getDoc(itemRef);
+        if (!itemSnap.exists()) throw new Error("Item no encontrado.");
+        const originalItem = itemSnap.data() as Item;
 
-    // 2. Actualizar estado de la solicitud
-    batch.update(transferRef, { status: TransferStatus.Approved });
+        // 2. Preparar el CLON con nueva identidad y limpieza de rastro
+        const newShortId = generateShortId(6);
+        const { qrId, ...itemMetadata } = originalItem; // Extraemos el ID viejo
 
-    // 3. Mover el artículo al nuevo dueño aplicando el HANDSHAKE GPS
-    const itemRef = doc(db, "Items", itemId);
-    const newShortId = generateShortId(6); // Nuevo QR para seguridad
+        const newItemData: any = {
+            ...itemMetadata,
+            ownerId: buyerId,
+            status: ItemStatus.EnRegla,
+            shortId: newShortId,
+            paymentStatus: PaymentStatus.Pending, // Bloqueo de rastro hasta que pague el nuevo dueño
+            location: startLocation,
+            locationTimestamp: startLocation ? Date.now() : null,
+            linkedDeviceId: null, // DESVINCULACIÓN CRÍTICA
+            trackingType: 'PASSIVE', // RESET DE MODO
+            createdAt: serverTimestamp(),
+            recoveryLocation: null,
+            recoveryTimestamp: null,
+            recoveryLocationTimestamp: null,
+        };
 
-    batch.update(itemRef, {
-        ownerId: buyerId,
-        status: ItemStatus.EnRegla,
-        shortId: newShortId,
-        paymentStatus: PaymentStatus.Pending, // <--- EL CANDADO DE NEGOCIO (BLOQUEA MAPA)
+        // 3. EJECUCIÓN ATÓMICA (BATCH)
+        const batch = writeBatch(db);
 
-        // ASIGNAMOS LA UBICACIÓN DONDE SE HIZO EL TRATO
-        location: startLocation,
-        locationTimestamp: startLocation ? Date.now() : null,
+        // A. Crear nuevo ítem (Genera nuevo qrId/docId)
+        const newItemsRef = doc(collection(db, "Items"));
+        batch.set(newItemsRef, { ...newItemData, qrId: newItemsRef.id });
 
-        recoveryLocation: null,
-        recoveryTimestamp: null,
-        recoveryLocationTimestamp: null,
-    });
+        // B. Eliminar ítem viejo (Muerte del QR anterior)
+        batch.delete(itemRef);
 
-    await batch.commit();
+        // C. Aprobar transferencia
+        batch.update(transferRef, { status: TransferStatus.Approved });
+
+        await batch.commit();
+    } catch (error) {
+        console.error("Error al aprobar transferencia:", error);
+        throw error;
+    }
 };
 
 export const rejectTransfer = async (transferId: string): Promise<void> => {

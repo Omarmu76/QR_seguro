@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { signInWithEmail, signInWithGoogle } from '../services/authService';
 import Spinner from '../components/Spinner';
+import { auth } from '../firebaseConfig';
 
 interface LoginScreenProps {
   onSwitchToRegister: () => void;
@@ -18,6 +19,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
     setIsLoading(true);
     try {
       await signInWithEmail(email, password);
+
+      // BLOQUEO DE SEGURIDAD: Solo permite entrar si el email está verificado
+      // Nota: onAuthStateChange en App.tsx reaccionará al login, pero aquí forzamos la salida si no cumple.
+      const currentUser = auth.currentUser;
+      if (currentUser && !currentUser.emailVerified) {
+        setError('⛔ Cuenta no verificada. Revisa tu email (Bandeja o Spam) para activar el acceso.');
+        setIsLoading(false);
+        await auth.signOut(); // Expulsar inmediatamente
+        return;
+      }
     } catch (err: any) {
       if (err.code === 'auth/invalid-credential') {
         setError('Email o contraseña incorrectos. Por favor, verifique sus datos.');
@@ -39,7 +50,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
       if (err.code === 'auth/popup-closed-by-user') {
         setError('Inicio de sesión cancelado.');
       } else if (err.code === 'auth/unauthorized-domain') {
-          setError('El dominio de esta app no está autorizado. Contacta al administrador.');
+        setError('El dominio de esta app no está autorizado. Contacta al administrador.');
       } else {
         setError('No se pudo iniciar sesión con Google.');
       }
@@ -47,7 +58,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
       setIsLoading(false);
     }
   };
-  
+
   const inputClass = "w-full bg-[#1e2a47] border border-blue-800 rounded-md p-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400";
 
   return (
@@ -78,7 +89,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
         </div>
       </div>
       <button onClick={handleGoogleLogin} disabled={isLoading} className="w-full bg-white text-gray-700 py-3 rounded-lg font-semibold shadow-lg flex items-center justify-center space-x-2 hover:bg-gray-200 disabled:bg-gray-400 transition-colors">
-        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" className="w-5 h-5"/>
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" className="w-5 h-5" />
         <span>Entrar con Google</span>
       </button>
       <p className="mt-8 text-center text-gray-400">
