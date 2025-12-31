@@ -8,7 +8,9 @@ import {
   onAuthStateChanged as onFirebaseAuthStateChanged,
   sendEmailVerification,
   updatePassword,
-  User
+  sendPasswordResetEmail,
+  User,
+  updateProfile
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from '../firebaseConfig';
@@ -95,6 +97,22 @@ export const updateUserPassword = async (user: User, newPass: string): Promise<v
     await updatePassword(user, newPass);
   } catch (error) {
     console.error("Error updating password:", error);
+    throw error;
+  }
+};
+
+export const resetUserPassword = async (email: string) => {
+  await sendPasswordResetEmail(auth, email);
+};
+
+export const updateUserProfileDisplayName = async (user: User, displayName: string): Promise<void> => {
+  try {
+    await updateProfile(user, { displayName });
+    await setDoc(doc(db, "Users", user.uid), {
+      nombreCompleto: displayName,
+    }, { merge: true });
+  } catch (error) {
+    console.error("Error updating profile display name:", error);
     throw error;
   }
 };

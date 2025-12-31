@@ -76,6 +76,9 @@ const SideMenu: React.FC<SideMenuProps> = ({
           <button onClick={() => onNavigate(Screen.TRANSFERS)} className={menuBtnClass}>
             <span className="text-xl">🤝</span> TRANSFERENCIAS
           </button>
+          <button onClick={() => onNavigate(Screen.SELL)} className={menuBtnClass}>
+            <span className="text-xl">💰</span> VENDER ARTÍCULO
+          </button>
 
           <div className="my-2 border-t border-gray-700 mx-4"></div>
           <button onClick={() => { onTermsRequest(); onClose(); }} className={menuBtnClass}>

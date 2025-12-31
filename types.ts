@@ -38,7 +38,10 @@ export enum Screen {
   TRANSFERS = 'TRANSFERS',     // Pantalla del vendedor (lista)
   REQUEST_TRANSFER = 'REQUEST_TRANSFER', // <--- ¡NUEVO! Pantalla del comprador (solicitud)
   PAYMENT_MODAL = 'PAYMENT_MODAL', // <--- ¡NUEVO! Para pagar seguro
-  ADMIN_PAYMENTS = 'ADMIN_PAYMENTS' // <--- NUEVA PANTALLA ADMIN
+  ADMIN_PAYMENTS = 'ADMIN_PAYMENTS', // <--- NUEVA PANTALLA ADMIN
+  PUBLIC_REPORTED = 'PUBLIC_REPORTED',
+  PUBLIC_ITEM_DETAIL = 'PUBLIC_ITEM_DETAIL',
+  SELL = 'SELL'
 }
 
 export enum TransferStatus {
