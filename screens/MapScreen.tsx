@@ -12,27 +12,37 @@ import MarkerClusterGroup from 'react-leaflet-markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 
-// ICONS CONFIG
+// --- CONFIGURACIÓN DE ICONOS LEAFLET (CRÍTICO PARA QUE SE VEAN) ---
 import iconMarker from 'leaflet/dist/images/marker-icon.png';
 import iconRetina from 'leaflet/dist/images/marker-icon-2x.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 const DefaultIcon = L.icon({ iconUrl: iconMarker, iconRetinaUrl: iconRetina, shadowUrl: iconShadow, iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// CUSTOM MARKERS
+// --- MARCADORES PERSONALIZADOS (COLORES) ---
 const greenIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
 const redIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
 const purpleIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
-// SENTRY ICONS
+
+// --- ICONOS VIGÍA (ESCUDOS Y SIRENAS) ---
 const shieldBlueIcon = new L.DivIcon({ className: 'custom-div-icon', html: `<div style="font-size: 24px;">🛡️</div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
 const shieldRedIcon = new L.DivIcon({ className: 'custom-div-icon', html: `<div style="font-size: 24px;" class="animate-pulse">🚨</div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
 
+// --- ICONOS SVG PARA LA UI (SOLO ESTÉTICA) ---
+const QrIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4h2v-4zM6 8V4h2M4 8H2M6 20h2m-2-4H2m6-8h4m2 0h4" />
+  </svg>
+);
+
+// --- COMPONENTE AUXILIAR (NO TOCAR) ---
 const MapUpdater = ({ center }: { center: { lat: number, lng: number } | null }) => {
   const map = useMap();
   useEffect(() => { }, [center, map]);
   return null;
 };
 
+// --- FÓRMULA HAVERSINE (DISTANCIA GPS) ---
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3;
   const φ1 = lat1 * Math.PI / 180; const φ2 = lat2 * Math.PI / 180;
@@ -45,6 +55,11 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
 interface MapScreenProps { user: User; onMenuClick: () => void; onScanRequest: () => void; onInputCodeRequest: () => void; }
 
 const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest, onInputCodeRequest }) => {
+
+  // ===========================================================================
+  // 🧠 CEREBRO LÓGICO (INTACTO - COPIADO TAL CUAL DE TU ARCHIVO)
+  // ===========================================================================
+
   const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
   const [initPos, setInitPos] = useState<{ lat: number; lng: number } | null>(null);
   const lastUpdateRef = useRef<number>(0);
@@ -55,7 +70,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   const myItemsRef = useRef<Item[]>([]);
   const currentDeviceId = localStorage.getItem('qr_device_id');
 
-  // --- VIGÍA COLLAB STATES ---
+  // --- VIGIA STATES ---
   const [vigiaMode, setVigiaMode] = useState(false);
   const [vigiaAnchor, setVigiaAnchor] = useState<{ lat: number, lng: number } | null>(null);
   const [vigiaPin, setVigiaPin] = useState<string>("");
@@ -75,7 +90,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     return () => { unsubMy(); unsubPublic(); unsubSentries(); };
   }, [user.uid]);
 
-  // 2. THIEF TRAP (OLD LOGIC)
+  // 2. THIEF TRAP
   const [alertTriggered, setAlertTriggered] = useState<string | null>(null);
   useEffect(() => {
     const thiefDetected = myItems.find(item => item.status === ItemStatus.Denunciado && item.linkedDeviceId !== currentDeviceId && item.location);
@@ -86,7 +101,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     }
   }, [myItems, alertTriggered, currentDeviceId]);
 
-  // 3. MASTER TELEMETRY (GPS + VIGIA)
+  // 3. MASTER TELEMETRY
   useEffect(() => {
     if (navigator.geolocation) {
       alarmAudio.current.loop = true;
@@ -103,7 +118,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
           if ((vigiaMode || silentHuntActive) && vigiaAnchor) {
             const dist = getDistance(vigiaAnchor.lat, vigiaAnchor.lng, newPos.lat, newPos.lng);
             let triggerAlarm = false;
-            // A. Self Detection (30m)
             if (dist > 30) {
               triggerAlarm = true;
               if (mySentryStatus !== 'ALARM') {
@@ -114,11 +128,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
               if (mySentryStatus === 'ALARM') setMySentryStatus('ARMED');
               updateMySentryStatus(user.uid, newPos.lat, newPos.lng, mySentryStatus);
             }
-            // B. Ally Panic
             const allyInPanic = activeSentries.find(s => getDistance(newPos.lat, newPos.lng, s.lat, s.lng) < 30 && s.status === 'ALARM');
             if (allyInPanic) triggerAlarm = true;
 
-            // C. Execute
             if (triggerAlarm && !silentHuntActive) {
               alarmAudio.current.play().catch(e => console.log(e));
               if (navigator.vibrate) navigator.vibrate([1000, 500, 1000]);
@@ -168,7 +180,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     }
   };
 
-  // 5. VISUALS (RESTORED POPUPS)
+  // 5. VISUAL PREP
   const displayedItems = useMemo(() => {
     const allItemsMap = new Map<string, Item>();
     const isPaid = (item: Item) => item.paymentStatus === PaymentStatus.Paid || item.paymentStatus === PaymentStatus.Free;
@@ -193,7 +205,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
       return (
         <Marker key={item.qrId} position={position} icon={icon}>
           <Popup>
-            {/* --- RESTORED DETAILED POPUP --- */}
+            {/* POPUP CLÁSICO (MEJORADO LEVEMENTE) */}
             <div className="text-center font-sans min-w-[150px]">
               <h3 className="text-lg font-extrabold text-gray-800 m-0 leading-tight">{item.marca} {item.modelo}</h3>
               <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-3 mt-1 border-b pb-1">{item.tipo}</p>
@@ -215,30 +227,53 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   if (!initPos && !userPos) return <div className="h-full flex items-center justify-center bg-[#0d1226] text-white"><Spinner /></div>;
   const center = userPos || initPos || { lat: -34.6037, lng: -58.3816 };
 
-  return (
-    <div className="flex flex-col h-full bg-[#0d1226] relative">
-      <Header title="MAPA GLOBAL" onMenuClick={onMenuClick} />
+  // ===========================================================================
+  // 🎨 SECCIÓN UI (ESTILOS GLASSMORPHISM - AQUÍ OCURRE LA MAGIA VISUAL)
+  // ===========================================================================
 
+  const glassCardClass = "bg-[#111928]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl";
+  const glassButtonClass = "bg-[#111928]/80 backdrop-blur-md border border-white/10 text-white rounded-xl px-4 py-2 text-xs font-medium shadow-lg active:scale-95 transition-all flex items-center gap-2";
+  const activeButtonClass = "bg-gradient-to-r from-blue-600 to-cyan-600 border border-transparent text-white rounded-xl px-4 py-2 text-xs font-bold shadow-blue-500/30 shadow-lg active:scale-95 transition-all flex items-center gap-2";
+  const fabClass = "w-14 h-14 bg-[#111928]/90 backdrop-blur-xl border border-white/10 rounded-full flex items-center justify-center text-white shadow-xl hover:bg-blue-600/20 active:scale-90 transition-all";
+
+  return (
+    <div className="flex flex-col h-full bg-[#0d1226] relative overflow-hidden">
+
+      {/* 1. HEADER (TRANSPARENTE) */}
+      <div className="absolute top-0 left-0 right-0 z-[1000]">
+        <Header title="RADAR GLOBAL" onMenuClick={onMenuClick} transparent={true} />
+      </div>
+
+      {/* 2. MODAL VIGÍA (ESTILO GLASS) */}
       {showPinModal && (
-        <div className="absolute inset-0 z-[2000] bg-black/90 flex flex-col items-center justify-center p-6 animate-fade-in">
-          <h3 className="text-2xl font-bold text-white mb-4">{showPinModal === 'SET' ? '🛡️ DEFINIR PIN' : '🔓 DESACTIVAR'}</h3>
-          <p className="text-gray-400 text-sm mb-6 text-center">{showPinModal === 'SET' ? 'Crea un PIN de 4 dígitos para esta sesión.' : 'Ingresa tu PIN para detener la alarma.'}</p>
-          <input type="number" value={pinInput} onChange={(e) => setPinInput(e.target.value)} className="bg-gray-800 text-white text-center text-4xl tracking-[10px] w-full max-w-[200px] py-4 rounded-xl border-2 border-blue-500 focus:border-yellow-400 outline-none mb-6" maxLength={4} autoFocus />
-          <div className="flex gap-4 w-full max-w-xs">
-            <button onClick={() => setShowPinModal(null)} className="flex-1 bg-gray-700 text-white py-3 rounded-lg font-bold">CANCELAR</button>
-            <button onClick={showPinModal === 'SET' ? confirmPinSet : confirmUnlock} className="flex-1 bg-yellow-500 text-black py-3 rounded-lg font-bold">{showPinModal === 'SET' ? 'ACTIVAR' : 'DESBLOQUEAR'}</button>
+        <div className="absolute inset-0 z-[2000] bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-6 animate-fade-in">
+          <div className={`${glassCardClass} p-8 w-full max-w-sm flex flex-col items-center`}>
+            <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-4 text-3xl">
+              {showPinModal === 'SET' ? '🛡️' : '🔓'}
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-2">{showPinModal === 'SET' ? 'ACTIVAR VIGÍA' : 'DESBLOQUEAR'}</h3>
+            <p className="text-blue-200/60 text-sm mb-6 text-center">
+              {showPinModal === 'SET' ? 'Crea un PIN de seguridad de 4 dígitos.' : 'Ingresa tu PIN para detener la alarma.'}
+            </p>
+            <input type="number" value={pinInput} onChange={(e) => setPinInput(e.target.value)} className="bg-[#0d1226] text-white text-center text-4xl tracking-[10px] w-full py-4 rounded-xl border border-blue-500/30 focus:border-blue-400 outline-none mb-6 shadow-inner" maxLength={4} autoFocus placeholder="••••" />
+            <div className="flex gap-3 w-full">
+              <button onClick={() => setShowPinModal(null)} className="flex-1 bg-white/5 hover:bg-white/10 text-gray-300 py-3 rounded-xl font-bold border border-white/5 transition-all">CANCELAR</button>
+              <button onClick={showPinModal === 'SET' ? confirmPinSet : confirmUnlock} className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 transition-all">{showPinModal === 'SET' ? 'ACTIVAR' : 'DESBLOQUEAR'}</button>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="absolute top-20 left-0 right-0 z-[1000] flex justify-center gap-2 px-4 overflow-x-auto pb-2 pointer-events-none">
-        <div className="pointer-events-auto flex gap-2">
-          <button onClick={() => setFilterMode('all')} className={`px-4 py-2 rounded-full font-bold text-sm shadow-md ${filterMode === 'all' ? 'bg-white text-blue-900' : 'bg-white/90 text-gray-600'}`}>🌎 Todos</button>
-          <button onClick={() => setFilterMode('alerts')} className={`px-4 py-2 rounded-full font-bold text-sm shadow-md ${filterMode === 'alerts' ? 'bg-gray-800 text-white ring-red-500' : 'bg-white/90 text-gray-600'}`}>🔴 Alertas</button>
-          <button onClick={() => setFilterMode('mine')} className={`px-4 py-2 rounded-full font-bold text-sm shadow-md ${filterMode === 'mine' ? 'bg-gray-800 text-green-400' : 'bg-white/90 text-gray-600'}`}>👤 Mis Cosas</button>
+      {/* 3. FILTROS FLOTANTES (CHIPS) */}
+      <div className="absolute top-24 left-0 right-0 z-[1000] flex justify-center gap-2 px-4 pointer-events-none">
+        <div className="pointer-events-auto flex gap-3 p-1 rounded-2xl bg-black/20 backdrop-blur-md border border-white/5">
+          <button onClick={() => setFilterMode('all')} className={filterMode === 'all' ? activeButtonClass : glassButtonClass}>🌎 Todos</button>
+          <button onClick={() => setFilterMode('alerts')} className={filterMode === 'alerts' ? "bg-red-500/80 text-white rounded-xl px-4 py-2 text-xs font-bold shadow-lg active:scale-95 transition-all" : glassButtonClass}>🚨 Alertas</button>
+          <button onClick={() => setFilterMode('mine')} className={filterMode === 'mine' ? activeButtonClass : glassButtonClass}>👤 Mis Cosas</button>
         </div>
       </div>
 
+      {/* 4. MAPA FONDO */}
       <div className="flex-grow w-full relative z-0">
         <MapContainer center={center} zoom={15} style={{ height: '100%', width: '100%' }} zoomControl={false}>
           <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -249,10 +284,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
           <MarkerClusterGroup chunkedLoading key={filterMode}>{markerElements}</MarkerClusterGroup>
         </MapContainer>
 
-        <div className="absolute bottom-24 right-4 z-[1000] flex flex-col gap-4">
-          <button onClick={handleVigiaClick} className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl border-4 transition-all ${vigiaMode ? (mySentryStatus === 'ALARM' ? 'bg-red-600 border-red-400 animate-pulse' : 'bg-blue-600 border-blue-400') : (silentHuntActive ? 'bg-blue-900 border-blue-500' : 'bg-blue-900 border-blue-500')}`}> <span className="text-2xl">{vigiaMode ? (mySentryStatus === 'ALARM' ? '🚨' : '🛡️') : '🛡️'}</span> </button>
-          <button onClick={onScanRequest} className="w-14 h-14 bg-[#2d3748] rounded-full flex items-center justify-center shadow-2xl border-2 border-gray-600"><svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg></button>
-          <button onClick={onInputCodeRequest} className="w-16 h-16 bg-yellow-500 rounded-full flex items-center justify-center shadow-2xl border-4 border-[#2d3748]"> <svg className="w-8 h-8 text-[#1a202c]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg> </button>
+        {/* 5. BOTONES DE ACCIÓN (FABs - CON PROPS ORIGINALES) */}
+        <div className="absolute bottom-28 right-4 z-[1000] flex flex-col gap-4 items-end">
+          <button onClick={onScanRequest} className={`${fabClass} bg-gradient-to-tr from-blue-600 to-cyan-500 border-none shadow-blue-500/30`}><QrIcon /></button>
+          <button onClick={onInputCodeRequest} className={fabClass}> <span className="font-bold text-sm">123</span></button>
+          <button onClick={handleVigiaClick} className={`w-16 h-16 rounded-full flex items-center justify-center shadow-2xl border-4 transition-all z-10 ${vigiaMode ? (mySentryStatus === 'ALARM' ? 'bg-red-600 border-red-400 animate-pulse shadow-red-500/50' : 'bg-blue-600 border-blue-400 shadow-blue-500/50') : (silentHuntActive ? 'bg-blue-900 border-blue-500 opacity-80' : 'bg-[#111928]/90 backdrop-blur-xl border-white/10 text-white')}`}> <span className="text-3xl filter drop-shadow-md">{vigiaMode ? (mySentryStatus === 'ALARM' ? '🚨' : '🛡️') : '🛡️'}</span> </button>
         </div>
       </div>
     </div>

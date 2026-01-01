@@ -1,6 +1,6 @@
 import {
     collection, addDoc, getDoc, getDocs, query, where, doc, deleteDoc, updateDoc,
-    writeBatch, serverTimestamp, orderBy, Timestamp, onSnapshot, Unsubscribe
+    writeBatch, serverTimestamp, orderBy, Timestamp, onSnapshot, Unsubscribe, setDoc
 } from "firebase/firestore";
 import { User } from 'firebase/auth';
 import { db } from "../firebaseConfig";
@@ -34,7 +34,7 @@ export const getItemByShortId = async (shortId: string): Promise<{ item: Item, s
         const data = docSnap.data() as Item;
         return { item: { ...data, qrId: docSnap.id }, status: data.status || ItemStatus.EnRegla };
     } catch (error) {
-        return null; // Retornamos null para permitir reintentos en el generador
+        return null;
     }
 };
 
@@ -104,7 +104,7 @@ const getUniqueShortId = async (): Promise<string> => {
         attempts++;
     }
 
-    if (!isUnique) throw new Error("Error de colisión: No se pudo generar un ID único tras varios intentos.");
+    if (!isUnique) throw new Error("Error de colisión: No se pudo generar un ID único.");
     return newId;
 };
 
@@ -113,29 +113,46 @@ const getUniqueShortId = async (): Promise<string> => {
 // ==========================================
 
 export const saveItem = async (
-    itemData: Omit<Item, 'qrId' | 'status' | 'ownerId' | 'shortId'>,
+    itemData: any,
     userId: string,
     locationData: { lat: number, lng: number } | null = null
 ): Promise<Item> => {
     try {
-        // AQUÍ ESTÁ LA SEGURIDAD ANTI-DUPLICADOS
+        console.log("🚀 V100: Iniciando registro de PROTEGIDO (Ultra-Defensivo)...");
         const shortId = await getUniqueShortId();
 
-        const newItem: Omit<Item, 'qrId'> = {
-            ...itemData,
+        // 1. CONSTRUCCIÓN INDIVIDUAL (Evita 'undefined' por completo)
+        const cleanPayload: any = {
+            tipo: String(itemData.tipo || 'Vehiculo'),
+            marca: String(itemData.marca || ''),
+            modelo: String(itemData.modelo || ''),
+            identificador: String(itemData.identificador || ''),
+            ownerId: String(userId),
+            shortId: String(shortId),
             status: ItemStatus.EnRegla,
-            ownerId: userId,
-            shortId: shortId,
             paymentStatus: PaymentStatus.Pending,
-            location: locationData,
+            location: locationData ? { lat: Number(locationData.lat), lng: Number(locationData.lng) } : null,
             locationTimestamp: locationData ? Date.now() : null,
+            reward: Number(itemData.reward || 0),
+            trackingType: String(itemData.trackingType || 'PASSIVE'),
+            linkedDeviceId: String(itemData.linkedDeviceId || ""),
+            qrId: ""
         };
-        const docRef = await addDoc(collection(db, "Items"), newItem);
-        await updateDoc(docRef, { qrId: docRef.id });
-        return { ...newItem, qrId: docRef.id };
-    } catch (error) {
-        console.error("Error saving item:", error);
-        throw new Error("Could not save item.");
+
+        console.table(cleanPayload);
+
+        // 2. GUARDADO CON ID PRE-GENERADO (setDoc es más robusto)
+        const itemsRef = collection(db, "Items");
+        const newDocRef = doc(itemsRef);
+        cleanPayload.qrId = newDocRef.id;
+
+        await setDoc(newDocRef, cleanPayload);
+
+        console.log("🚀 V100: Registro Exitoso. ID:", newDocRef.id);
+        return cleanPayload as Item;
+    } catch (error: any) {
+        console.error("❌ V100 ERROR:", error);
+        throw new Error(`[V100] Fallo Crítico en Firebase: ${error.message || 'Sin detalles'}`);
     }
 };
 
@@ -151,7 +168,6 @@ export const updateItemStatus = async (
         if (!docSnap.exists()) throw new Error("Item not found.");
         const itemData = docSnap.data() as Item;
 
-        // AQUÍ ESTÁ EL BLINDAJE PARA EL PÚBLICO
         if (userId === "public") {
             if (newStatus !== ItemStatus.Denunciado) {
                 throw new Error("Acceso Denegado: El público solo puede reportar hallazgos.");

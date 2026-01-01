@@ -1,10 +1,10 @@
-// FIX: Use the compat library for initialization to support older Firebase SDK versions,
-// while still exporting v9 modular services for the rest of the app to use.
-import firebase from "firebase/compat/app";
+// 1. IMPORTACIONES MODERNAS (MODULARES)
+import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 
-// Your web app's Firebase configuration
+// 2. TUS LLAVES DE ACCESO (CONFIGURACIÓN)
 const firebaseConfig = {
   apiKey: "AIzaSyCDfuS3pO2xAf4yfjfFN-0MuZRq6pVjcrk",
   authDomain: "qrseguro-106ba.firebaseapp.com",
@@ -14,11 +14,12 @@ const firebaseConfig = {
   appId: "1:953476288560:web:754b1888d2e7469210ddf5"
 };
 
-// Initialize Firebase using the compat API
-firebase.initializeApp(firebaseConfig);
+// 3. INICIALIZACIÓN
+const app = initializeApp(firebaseConfig);
 
-// Get a Firestore instance using the modular API. It will use the default app.
-export const db = getFirestore();
+// 4. EXPORTACIÓN DE HERRAMIENTAS
+export const db = getFirestore(app);
+export const auth = getAuth(app);
+export const storage = getStorage(app);
 
-// Get an Auth instance using the modular API. It will use the default app.
-export const auth = getAuth();
+export default app;
