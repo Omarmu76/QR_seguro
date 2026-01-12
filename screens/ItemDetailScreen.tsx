@@ -4,7 +4,7 @@ import QRCode from '../components/QRCode';
 import { Item, ItemStatus } from '../types';
 import { updateItemStatus } from '../services/itemService';
 import Spinner from '../components/Spinner';
-import ConfirmationModal from '../components/common/ConfirmationModal'; // <--- RUTA CORREGIDA
+import ConfirmationModal from '../components/common/ConfirmationModal';
 
 interface ItemDetailScreenProps {
   item: Item;
@@ -30,6 +30,24 @@ const ItemDetailScreen: React.FC<ItemDetailScreenProps> = ({ item, onDone }) => 
     isOpen: false, title: '', message: '', onConfirm: () => { }, isDestructive: false
   });
 
+  // Helpers de Estilo
+  const isReported = currentItemStatus === ItemStatus.Denunciado;
+  const isRecovered = currentItemStatus === ItemStatus.Recuperado;
+
+  let statusBadge = <span className="bg-blue-900/50 text-blue-200 px-4 py-1 rounded-full text-xs font-bold tracking-widest border border-blue-500/30">PROTEGIDO</span>;
+  let borderClass = "border-white/10";
+
+  if (isReported) {
+    statusBadge = <span className="bg-red-600 text-white px-4 py-1 rounded-full text-xs font-black tracking-widest animate-pulse shadow-lg shadow-red-500/40">🚨 ROBADO</span>;
+    borderClass = "border-red-600 shadow-red-900/20";
+  } else if (isRecovered) {
+    statusBadge = <span className="bg-green-600 text-white px-4 py-1 rounded-full text-xs font-black tracking-widest shadow-lg shadow-green-500/40">✔ RECUPERADO</span>;
+    borderClass = "border-green-600 shadow-green-900/20";
+  }
+
+  const labelClass = "text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-1";
+  const valueClass = "text-white font-medium text-sm bg-black/20 px-3 py-2 rounded-lg border border-white/5";
+
   const handleShare = async () => {
     const canvas = document.getElementById(qrCanvasId) as HTMLCanvasElement;
     if (!canvas) return;
@@ -46,26 +64,26 @@ const ItemDetailScreen: React.FC<ItemDetailScreenProps> = ({ item, onDone }) => 
   };
 
   const initiateToggleStatus = () => {
-    const isReported = currentItemStatus === ItemStatus.Denunciado;
+    const isReportedAtMoment = currentItemStatus === ItemStatus.Denunciado;
     setConfirmModal({
       isOpen: true,
-      title: isReported ? "Confirmar Recuperación" : "🚨 REPORTAR ROBO",
-      message: isReported
+      title: isReportedAtMoment ? "Confirmar Recuperación" : "🚨 REPORTAR ROBO",
+      message: isReportedAtMoment
         ? "¡Qué buena noticia! El artículo volverá a estado 'Seguro' (Verde) en tu mapa y desaparecerá de las alertas públicas."
         : "Esta acción publicará una ALERTA ROJA. Se guardará tu ubicación actual como punto de incidente. ¿Confirmas el reporte?",
-      isDestructive: !isReported,
-      onConfirm: () => executeToggleStatus(isReported)
+      isDestructive: !isReportedAtMoment,
+      onConfirm: () => executeToggleStatus(isReportedAtMoment)
     });
   };
 
-  const executeToggleStatus = async (isReported: boolean) => {
+  const executeToggleStatus = async (isCurrentlyReported: boolean) => {
     setConfirmModal(prev => ({ ...prev, isOpen: false }));
     if (!item.qrId) return;
     setIsProcessing(true);
     try {
       let location = null;
-      if (!isReported) { try { location = await getCurrentLocation(); } catch (e) { } }
-      const newStatus = isReported ? ItemStatus.EnRegla : ItemStatus.Denunciado;
+      if (!isCurrentlyReported) { try { location = await getCurrentLocation(); } catch (e) { } }
+      const newStatus = isCurrentlyReported ? ItemStatus.Recuperado : ItemStatus.Denunciado;
 
       await updateItemStatus(item.qrId, item.ownerId, newStatus, location);
       setCurrentItemStatus(newStatus);
@@ -77,8 +95,8 @@ const ItemDetailScreen: React.FC<ItemDetailScreenProps> = ({ item, onDone }) => 
   };
 
   return (
-    <div className="absolute inset-0 bg-[#0d1226] flex flex-col z-50 text-white">
-      <Header title="DETALLE DEL ITEM" onMenuClick={onDone} />
+    <div className="flex flex-col h-full bg-[#0d1226] text-white overflow-hidden">
+      <Header title="DETALLE" onMenuClick={() => { }} onBack={onDone} transparent={false} />
 
       <ConfirmationModal
         isOpen={confirmModal.isOpen}
@@ -91,31 +109,85 @@ const ItemDetailScreen: React.FC<ItemDetailScreenProps> = ({ item, onDone }) => 
         isDestructive={confirmModal.isDestructive}
       />
 
-      <div className="flex-grow p-6 overflow-y-auto flex flex-col items-center">
-        <div className="w-full max-w-xs mb-6">
-          {item.qrId && item.shortId ? <QRCode shortId={item.shortId} canvasId={qrCanvasId} /> : <div className="w-full h-40 bg-gray-700 flex items-center justify-center rounded"><p>QR No disponible</p></div>}
-          <p className="text-center mt-4 text-gray-300">Código: <strong className="text-yellow-400 text-lg ml-2">{item.shortId || 'N/A'}</strong></p>
-        </div>
+      <div className="flex-grow overflow-y-auto p-4 flex flex-col items-center">
+        {/* TARJETA CENTRADA (No pantalla completa) */}
+        <div className={`w-full max-w-sm bg-[#111928] rounded-2xl p-6 shadow-2xl border ${borderClass} animate-fade-in space-y-6 relative overflow-hidden`}>
 
-        <div className={`p-4 rounded-lg w-full mb-6 border ${currentItemStatus === ItemStatus.Denunciado ? 'bg-red-900/30 border-red-500' : 'bg-[#1e2a47] border-gray-700'}`}>
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="text-lg font-bold text-white">Datos</h3>
-            {currentItemStatus === ItemStatus.Denunciado && <span className="bg-red-600 text-xs px-2 py-1 rounded font-bold animate-pulse">ROBADO</span>}
-          </div>
-          <div className="space-y-1 text-sm text-gray-300">
-            <p>Tipo: <span className="text-white">{item.tipo}</span></p>
-            <p>Marca: <span className="text-white">{item.marca}</span></p>
-            <p>Modelo: <span className="text-white">{item.modelo}</span></p>
-            <p>ID: <span className="text-white">{item.identificador}</span></p>
-          </div>
-        </div>
+          {/* Fondo decorativo sutil */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
 
-        <div className="w-full space-y-3 mt-auto">
-          <button onClick={initiateToggleStatus} disabled={isProcessing} className={`w-full py-4 rounded-xl font-black text-sm shadow-lg flex justify-center items-center gap-2 ${currentItemStatus === ItemStatus.Denunciado ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-red-600 hover:bg-red-500 text-white'}`}>
-            {isProcessing ? <Spinner /> : (currentItemStatus === ItemStatus.Denunciado ? "MARCAR RECUPERADO" : "🚨 REPORTAR ROBO")}
-          </button>
-          <button onClick={handleShare} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-500 transition-colors">COMPARTIR QR</button>
-          <button onClick={onDone} className="w-full bg-transparent border border-gray-600 text-gray-400 py-3 rounded-lg hover:text-white">Volver</button>
+          {/* CABECERA DE LA FICHA */}
+          <div className="text-center space-y-2 border-b border-white/5 pb-6">
+            <div className="flex justify-center mb-4">
+              {statusBadge}
+            </div>
+            <h2 className="text-2xl font-black text-white leading-none tracking-tight">{item.marca}</h2>
+            <p className="text-blue-400 font-bold text-sm tracking-wide uppercase">{item.modelo}</p>
+          </div>
+
+          {/* QR CODE (Centro de atención) */}
+          <div className="flex flex-col items-center justify-center py-2">
+            <div className="p-3 bg-white rounded-xl shadow-lg transform transition-transform hover:scale-105">
+              <QRCode shortId={item.shortId || 'error'} canvasId={qrCanvasId} size={140} />
+            </div>
+            <p className="mt-3 text-[10px] font-mono text-gray-500 tracking-[0.3em]">
+              ID: <span className="text-blue-400">{item.shortId || '---'}</span>
+            </p>
+          </div>
+
+          {/* GRILLA DE DATOS */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className={labelClass}>TIPO</p>
+              <p className={valueClass}>{item.tipo}</p>
+            </div>
+            <div>
+              <p className={labelClass}>COLOR</p>
+              <p className={valueClass}>{item.color || '---'}</p>
+            </div>
+          </div>
+
+          {/* IDENTIFICADOR (Específico del item) */}
+          {item.identificador && (
+            <div>
+              <p className={labelClass}>IDENTIFICADOR</p>
+              <p className={valueClass}>{item.identificador}</p>
+            </div>
+          )}
+
+          {/* DESCRIPCIÓN */}
+          <div>
+            <p className={labelClass}>NOTAS / DESCRIPCIÓN</p>
+            <div className={`min-h-[60px] ${valueClass} text-gray-300 italic`}>
+              {item.description || item.descripcion || "Sin descripción adicional."}
+            </div>
+          </div>
+
+          {/* BOTONES DE ACCIÓN */}
+          <div className="pt-4 space-y-3">
+            <button
+              onClick={initiateToggleStatus}
+              disabled={isProcessing}
+              className={`w-full py-4 rounded-xl font-black text-xs tracking-widest shadow-lg flex justify-center items-center gap-2 transform active:scale-95 transition-all ${isReported ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-red-600 hover:bg-red-500 text-white shadow-red-900/40'}`}
+            >
+              {isProcessing ? <Spinner /> : (isReported ? "MARCAR COMO RECUPERADO" : "🚨 REPORTAR ROBO")}
+            </button>
+
+            <button
+              onClick={handleShare}
+              className="w-full bg-[#1e2a47] hover:bg-[#25335a] text-white py-3 rounded-xl font-bold text-xs tracking-widest border border-white/5 transition-all active:scale-95"
+            >
+              COMPARTIR QR
+            </button>
+
+            <button
+              onClick={onDone}
+              className="w-full text-gray-500 hover:text-white py-2 text-[10px] font-bold tracking-widest transition-colors"
+            >
+              VOLVER A LA LISTA
+            </button>
+          </div>
+
         </div>
       </div>
     </div>

@@ -169,8 +169,9 @@ export const updateItemStatus = async (
         const itemData = docSnap.data() as Item;
 
         if (userId === "public") {
-            if (newStatus !== ItemStatus.Denunciado) {
-                throw new Error("Acceso Denegado: El público solo puede reportar hallazgos.");
+            // El público solo puede denunciar hallazgos o marcar como recuperado
+            if (newStatus !== ItemStatus.Denunciado && newStatus !== ItemStatus.Recuperado) {
+                throw new Error("Acceso Denegado: El público solo puede reportar hallazgos o recuperaciones.");
             }
         } else if (itemData.ownerId !== userId) {
             throw new Error("Permission denied.");
@@ -183,11 +184,14 @@ export const updateItemStatus = async (
             updateData.recoveryLocation = null;
             updateData.recoveryTimestamp = null;
         } else if (newStatus === ItemStatus.EnRegla || newStatus === ItemStatus.Vendido) {
-            updateData.location = null;
-            updateData.locationTimestamp = null;
-            updateData.recoveryLocation = null;
-            updateData.recoveryTimestamp = null;
+            // No borramos la ubicación para que no desaparezca del mapa.
+            // Se mantiene la última posición conocida (sea del robo o de la recuperación).
         } else if (newStatus === ItemStatus.Recuperado) {
+            // LÓGICA DEFINITIVA: Mantenemos estado Recuperado
+            // Pero COPIAMOS las coordenadas a 'location' para que el mapa lo pinte.
+            updateData.status = ItemStatus.Recuperado;
+            updateData.location = locationData;
+            updateData.locationTimestamp = Date.now();
             updateData.recoveryLocation = locationData;
             updateData.recoveryTimestamp = Date.now();
         }
@@ -337,7 +341,8 @@ export const subscribeToUserItems = (userId: string, callback: (items: Item[]) =
 };
 
 export const subscribeToPublicReportedItems = (callback: (items: Item[]) => void): Unsubscribe => {
-    const q = query(collection(db, "Items"), where("status", "in", [ItemStatus.Denunciado, ItemStatus.Recuperado]));
+    // Revertimos a solo DENUNCIADO para evitar errores de permisos en las reglas de Firebase
+    const q = query(collection(db, "Items"), where("status", "==", ItemStatus.Denunciado));
     return onSnapshot(q, (snapshot) => {
         const items = snapshot.docs.map(doc => ({ ...doc.data(), qrId: doc.id } as Item));
         callback(items);

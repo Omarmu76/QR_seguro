@@ -38,7 +38,7 @@ interface GenerateScreenProps {
 
 const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, user, onMenuClick }) => {
 
-  // --- ESTADOS ---
+  // --- ESTADOS (Lógica Original Intacta) ---
   const [item, setItem] = useState({
     tipo: 'Vehiculo',
     marca: '',
@@ -142,11 +142,8 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
         linkedDeviceId,
       };
 
-      // Limpieza de emergencia por si algo quedó undefined
       const cleanPayload = JSON.parse(JSON.stringify(rawData));
-
       const savedItem = await saveItem(cleanPayload, user.uid, finalLocation);
-
       onGenerateComplete(savedItem);
 
     } catch (err: any) {
@@ -164,175 +161,192 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
   const inputClass = "w-full bg-[#0d1226]/80 border border-blue-500/20 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-all";
 
   return (
-    <div className="flex flex-col h-full bg-[#0d1226] text-white relative overflow-hidden">
+    // 1. CONTENEDOR MAESTRO (Fondo Negro - Monitor)
+    <div className="w-full h-full bg-black flex justify-center items-center relative overflow-hidden">
 
-      {/* FONDO DECORATIVO */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-blue-600/20 rounded-full blur-[100px]"></div>
-        <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-cyan-600/20 rounded-full blur-[100px]"></div>
+      {/* 2. COLUMNA IZQUIERDA (Publicidad PC) */}
+      <div id="ad-space-left" className="hidden lg:flex flex-1 h-full items-center justify-center z-0 relative">
+        {/* Espacio reservado para Ads */}
       </div>
 
-      <Header title="NUEVO PROTEGIDO" onMenuClick={onMenuClick} />
+      {/* 3. COLUMNA CENTRAL (App Flotante) */}
+      <div className="w-full h-full lg:max-w-md lg:h-[95vh] lg:rounded-[2.5rem] lg:border-[8px] lg:border-[#1a1f35] lg:shadow-2xl bg-[#0d1226] flex flex-col relative z-10 overflow-hidden transition-all duration-300">
 
-      <div className="flex-grow p-4 overflow-y-auto z-10 flex flex-col items-center justify-start pb-20">
-        <div className="w-full max-w-md space-y-5">
+        {/* FONDO DECORATIVO INTERNO */}
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+          <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-blue-600/20 rounded-full blur-[100px]"></div>
+          <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-cyan-600/20 rounded-full blur-[100px]"></div>
+        </div>
 
-          <form onSubmit={handleSubmit} className={glassCardClass}>
-            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-400/50 to-transparent"></div>
+        <Header title="NUEVO PROTEGIDO" onMenuClick={onMenuClick} />
 
-            <div className="space-y-4">
-              <div>
-                <label className={labelClass}>Tipo de Artículo</label>
-                <div className="relative">
-                  <select
-                    name="tipo"
-                    value={item.tipo}
-                    onChange={handleChange}
-                    className={`${inputClass} appearance-none cursor-pointer text-blue-100 font-medium`}
-                  >
-                    <option>Vehiculo</option>
-                    <option>Celular</option>
-                    <option>Notebook</option>
-                    <option>Bicicleta</option>
-                    <option>Documentación</option>
-                    <option>Mochila</option>
-                    <option>Otro</option>
-                  </select>
-                  <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-blue-400">
-                    <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
-                  </div>
-                </div>
-              </div>
+        {/* CONTENIDO SCROLLABLE */}
+        <div className="flex-grow p-4 overflow-y-auto custom-scrollbar z-10 flex flex-col items-center justify-start pb-20">
+          <div className="w-full max-w-md space-y-5">
 
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSubmit} className={glassCardClass}>
+              <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-400/50 to-transparent"></div>
+
+              <div className="space-y-4">
                 <div>
-                  <label className={labelClass}>Marca</label>
-                  <input
-                    type="text"
-                    name="marca"
-                    value={item.marca}
-                    onChange={handleChange}
-                    placeholder="Ej: Samsung"
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Modelo</label>
-                  <input
-                    type="text"
-                    name="modelo"
-                    value={item.modelo}
-                    onChange={handleChange}
-                    placeholder="Ej: S23"
-                    className={inputClass}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className={labelClass}>
-                  {item.tipo === 'Vehiculo' ? 'Patente' : 'Identificador Único (Serie/IMEI)'}
-                </label>
-                <input
-                  type="text"
-                  name="identificador"
-                  value={item.identificador}
-                  onChange={handleChange}
-                  placeholder={item.tipo === 'Vehiculo' ? 'AA 123 BB' : 'XJ9-0022...'}
-                  className={inputClass}
-                />
-              </div>
-            </div>
-
-            <div className="my-5 border-t border-white/5"></div>
-
-            <div
-              onClick={() => setIsSelfDevice(!isSelfDevice)}
-              className={`
-                relative rounded-xl p-4 transition-all duration-300 border cursor-pointer group
-                ${isSelfDevice
-                  ? 'bg-blue-600/20 border-blue-500/60 shadow-[0_0_20px_rgba(37,99,235,0.15)]'
-                  : 'bg-white/5 border-white/5 hover:bg-white/10'}
-              `}
-            >
-              <div className="flex items-start gap-4">
-                <div className={`
-                  p-2.5 rounded-lg transition-colors
-                  ${isSelfDevice ? 'bg-blue-500 text-white' : 'bg-gray-700/50 text-gray-500'}
-                `}>
-                  <DeviceIcon />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={`font-bold text-sm ${isSelfDevice ? 'text-blue-200' : 'text-gray-300'}`}>
-                      Este Dispositivo
-                    </span>
-                    <div className={`w-9 h-5 rounded-full relative transition-colors ${isSelfDevice ? 'bg-blue-500' : 'bg-gray-600/50'}`}>
-                      <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all shadow-sm ${isSelfDevice ? 'left-5' : 'left-1'}`}></div>
+                  <label className={labelClass}>Tipo de Artículo</label>
+                  <div className="relative">
+                    <select
+                      name="tipo"
+                      value={item.tipo}
+                      onChange={handleChange}
+                      className={`${inputClass} appearance-none cursor-pointer text-blue-100 font-medium`}
+                    >
+                      <option>Vehiculo</option>
+                      <option>Celular</option>
+                      <option>Notebook</option>
+                      <option>Bicicleta</option>
+                      <option>Documentación</option>
+                      <option>Mochila</option>
+                      <option>Otro</option>
+                    </select>
+                    <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-blue-400">
+                      <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
                     </div>
                   </div>
-                  <p className="text-[11px] text-gray-400 leading-tight">
-                    Actívalo <b>solo</b> si estás usando el dispositivo a registrar. Habilita el rastreo "Vigía".
-                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelClass}>Marca</label>
+                    <input
+                      type="text"
+                      name="marca"
+                      value={item.marca}
+                      onChange={handleChange}
+                      placeholder="Ej: Samsung"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Modelo</label>
+                    <input
+                      type="text"
+                      name="modelo"
+                      value={item.modelo}
+                      onChange={handleChange}
+                      placeholder="Ej: S23"
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    {item.tipo === 'Vehiculo' ? 'Patente' : 'Identificador Único (Serie/IMEI)'}
+                  </label>
+                  <input
+                    type="text"
+                    name="identificador"
+                    value={item.identificador}
+                    onChange={handleChange}
+                    placeholder={item.tipo === 'Vehiculo' ? 'AA 123 BB' : 'XJ9-0022...'}
+                    className={inputClass}
+                  />
                 </div>
               </div>
-            </div>
 
-          </form>
+              <div className="my-5 border-t border-white/5"></div>
 
-          <div className="space-y-4 pt-2">
-
-            <div className="flex items-center justify-center gap-2 text-xs py-2 rounded-full bg-black/20 border border-white/5 mx-auto w-fit px-4">
-              <div className={bestLocation ? "text-green-500" : "text-yellow-500 animate-pulse"}>
-                <GpsIcon />
+              <div
+                onClick={() => setIsSelfDevice(!isSelfDevice)}
+                className={`
+                  relative rounded-xl p-4 transition-all duration-300 border cursor-pointer group
+                  ${isSelfDevice
+                    ? 'bg-blue-600/20 border-blue-500/60 shadow-[0_0_20px_rgba(37,99,235,0.15)]'
+                    : 'bg-white/5 border-white/5 hover:bg-white/10'}
+                `}
+              >
+                <div className="flex items-start gap-4">
+                  <div className={`
+                    p-2.5 rounded-lg transition-colors
+                    ${isSelfDevice ? 'bg-blue-500 text-white' : 'bg-gray-700/50 text-gray-500'}
+                  `}>
+                    <DeviceIcon />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`font-bold text-sm ${isSelfDevice ? 'text-blue-200' : 'text-gray-300'}`}>
+                        Este Dispositivo
+                      </span>
+                      <div className={`w-9 h-5 rounded-full relative transition-colors ${isSelfDevice ? 'bg-blue-500' : 'bg-gray-600/50'}`}>
+                        <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all shadow-sm ${isSelfDevice ? 'left-5' : 'left-1'}`}></div>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-gray-400 leading-tight">
+                      Actívalo <b>solo</b> si estás usando el dispositivo a registrar. Habilita el rastreo "Vigía".
+                    </p>
+                  </div>
+                </div>
               </div>
-              {bestLocation ? (
-                <span className="text-gray-300">
-                  Señal GPS Estable <span className="text-green-400 font-mono text-[10px] ml-1">±{Math.round(gpsAccuracy || 0)}m</span>
-                </span>
-              ) : (
-                <span className="text-yellow-500/90 font-medium">Buscando satélites...</span>
-              )}
-            </div>
 
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/30 p-4 rounded-xl flex items-center gap-3 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2">
-                <span className="text-red-400 text-xl">⚠️</span>
-                <p className="text-red-200 text-xs font-medium leading-snug">{error}</p>
+            </form>
+
+            <div className="space-y-4 pt-2">
+
+              <div className="flex items-center justify-center gap-2 text-xs py-2 rounded-full bg-black/20 border border-white/5 mx-auto w-fit px-4">
+                <div className={bestLocation ? "text-green-500" : "text-yellow-500 animate-pulse"}>
+                  <GpsIcon />
+                </div>
+                {bestLocation ? (
+                  <span className="text-gray-300">
+                    Señal GPS Estable <span className="text-green-400 font-mono text-[10px] ml-1">±{Math.round(gpsAccuracy || 0)}m</span>
+                  </span>
+                ) : (
+                  <span className="text-yellow-500/90 font-medium">Buscando satélites...</span>
+                )}
               </div>
-            )}
 
-            <button
-              onClick={handleSubmit}
-              disabled={isLoading || !isFormValid}
-              className={`
-                w-full py-4 rounded-xl text-lg font-bold shadow-lg flex items-center justify-center gap-3 transition-all duration-300 transform active:scale-[0.98]
-                ${isLoading || !isFormValid
-                  ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-white/5'
-                  : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-blue-500/20 border border-transparent'}
-              `}
-            >
-              {isLoading ? (
-                <>
-                  <Spinner />
-                  <span className="text-sm font-normal animate-pulse">{loadingMessage}</span>
-                </>
-              ) : (
-                <>GENERAR CÓDIGO QR</>
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/30 p-4 rounded-xl flex items-center gap-3 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2">
+                  <span className="text-red-400 text-xl">⚠️</span>
+                  <p className="text-red-200 text-xs font-medium leading-snug">{error}</p>
+                </div>
               )}
-            </button>
+
+              <button
+                onClick={handleSubmit}
+                disabled={isLoading || !isFormValid}
+                className={`
+                  w-full py-4 rounded-xl text-lg font-bold shadow-lg flex items-center justify-center gap-3 transition-all duration-300 transform active:scale-[0.98]
+                  ${isLoading || !isFormValid
+                    ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-white/5'
+                    : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-blue-500/20 border border-transparent'}
+                `}
+              >
+                {isLoading ? (
+                  <>
+                    <Spinner />
+                    <span className="text-sm font-normal animate-pulse">{loadingMessage}</span>
+                  </>
+                ) : (
+                  <>GENERAR CÓDIGO QR</>
+                )}
+              </button>
+            </div>
           </div>
         </div>
+
+        <ConfirmationModal
+          isOpen={isConfirmModalOpen}
+          title="Confirmar Registro"
+          message={`¿Generar QR para ${item.marca} ${item.modelo}? Se registrará en tu ubicación actual.`}
+          onConfirm={handleConfirmGenerate}
+          onCancel={() => setConfirmModalOpen(false)}
+          confirmText="Sí, Crear"
+        />
       </div>
 
-      <ConfirmationModal
-        isOpen={isConfirmModalOpen}
-        title="Confirmar Registro"
-        message={`¿Generar QR para ${item.marca} ${item.modelo}? Se registrará en tu ubicación actual.`}
-        onConfirm={handleConfirmGenerate}
-        onCancel={() => setConfirmModalOpen(false)}
-        confirmText="Sí, Crear"
-      />
+      {/* 4. COLUMNA DERECHA (Publicidad PC) */}
+      <div id="ad-space-right" className="hidden lg:flex flex-1 h-full items-center justify-center z-0 relative">
+        {/* Espacio reservado para Ads */}
+      </div>
+
     </div>
   );
 };

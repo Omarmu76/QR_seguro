@@ -15,28 +15,23 @@ interface MyItemsScreenProps {
   onActivateRequest: (item: Item) => void;
 }
 
-// --- FUNCIÓN GPS ROBUSTA ---
-// Intenta varias veces obtener la posición para evitar fallos de "inicio en frío"
+// --- FUNCIÓN GPS ROBUSTA (INTACTA) ---
 const getRobustLocation = (): Promise<{ lat: number, lng: number }> => {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error("Sin soporte GPS"));
       return;
     }
-
     const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
-
-    // Intento 1
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       (err) => {
         console.warn("Fallo GPS intento 1, reintentando...", err);
-        // Intento 2 (Reintento automático)
         setTimeout(() => {
           navigator.geolocation.getCurrentPosition(
             (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
             (_errFinal) => reject(new Error("No se pudo obtener GPS. Intenta activar WiFi o salir al exterior.")),
-            { enableHighAccuracy: false, timeout: 20000, maximumAge: 0 } // <--- ESTO SOLUCIONA EL ERROR EN PC
+            { enableHighAccuracy: false, timeout: 20000, maximumAge: 0 }
           );
         }, 1000);
       },
@@ -46,6 +41,7 @@ const getRobustLocation = (): Promise<{ lat: number, lng: number }> => {
 };
 
 const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEditRequest, onViewRequest, onActivateRequest }) => {
+  // --- LÓGICA DE ESTADO (INTACTA) ---
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
@@ -90,14 +86,13 @@ const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEdit
     try {
       let location = null;
       if (!isReported) {
-        // Si voy a denunciar, necesito GPS obligatorio
         try { location = await getRobustLocation(); } catch (e) {
-          alert("⚠️ Error: Se necesita GPS para reportar el robo (ubicación del incidente).");
+          alert("⚠️ Error: Se necesita GPS para reportar el robo.");
           setProcessingId(null);
           return;
         }
       }
-      const newStatus = isReported ? ItemStatus.EnRegla : ItemStatus.Denunciado;
+      const newStatus = isReported ? ItemStatus.Recuperado : ItemStatus.Denunciado;
       await updateItemStatus(item.qrId, user.uid, newStatus, location);
       await fetchItems();
     } catch (error) { alert("Error de conexión."); } finally { setProcessingId(null); }
@@ -105,22 +100,16 @@ const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEdit
 
   const handleUpdateLocation = async (item: Item) => {
     if (!item.qrId) return;
-    // Confirmación simple del navegador para agilidad
     if (!window.confirm("¿Actualizar la ubicación de este artículo a tu posición actual?")) return;
-
     setProcessingId(item.qrId);
     try {
-      const location = await getRobustLocation(); // Usamos la nueva función robusta
+      const location = await getRobustLocation();
       if (item.qrId) {
-        await updateItemLocation(item.qrId, user.uid, location);
+        await updateItemLocation(item.qrId, location.lat, location.lng);
         alert("📍 Ubicación actualizada exitosamente.");
         await fetchItems();
       }
-    } catch (error: any) {
-      alert(error.message || "Error de GPS.");
-    } finally {
-      setProcessingId(null);
-    }
+    } catch (error: any) { alert(error.message || "Error de GPS."); } finally { setProcessingId(null); }
   };
 
   const initiateDelete = (item: Item) => {
@@ -136,9 +125,13 @@ const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEdit
     });
   };
 
+  // --- UI CONSTANTS ---
+  const glassCardBase = "relative rounded-2xl overflow-hidden transition-all duration-300 shadow-xl backdrop-blur-md border";
+
   return (
     <div className="flex flex-col h-full bg-[#0d1226]">
-      <Header title="MIS ARTÍCULOS" onMenuClick={onMenuClick} />
+      {/* HEADER SIN TRANSPARENCIA AQUÍ (Para que se vea sólido y limpio) */}
+      <Header title="MIS ARTÍCULOS" onMenuClick={onMenuClick} transparent={false} />
 
       <ConfirmationModal
         isOpen={confirmModal.isOpen}
@@ -151,80 +144,149 @@ const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEdit
         isDestructive={confirmModal.isDestructive}
       />
 
-      <div className="flex-grow p-4 overflow-y-auto">
-        {loading ? <div className="flex justify-center items-center h-full"><Spinner /></div>
-          : items.length === 0 ? <div className="flex flex-col items-center justify-center h-[60%] text-gray-500 opacity-60"><p>No tienes artículos registrados.</p></div>
-            : (
-              <div className="space-y-4 pb-24">
-                {items.map((item) => {
-                  const isLocked = item.paymentStatus === PaymentStatus.Pending;
-                  const isInReview = item.paymentStatus === PaymentStatus.Review;
-                  const isExpanded = expandedItemId === item.qrId;
-                  const isReported = item.status === ItemStatus.Denunciado;
-                  const actionsDisabled = isLocked || isInReview;
+      <div className="flex-grow p-4 overflow-y-auto pb-28">
+        {loading ? (
+          <div className="flex justify-center items-center h-full"><Spinner /></div>
+        ) : items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-[60%] text-gray-400 opacity-60 text-center">
+            <div className="text-6xl mb-4">📦</div>
+            <p className="text-lg font-medium">Tu bóveda está vacía.</p>
+            <p className="text-xs">Usa el botón "+" para proteger algo.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {items.map((item) => {
+              // Estados lógicos
+              const isLocked = item.paymentStatus === PaymentStatus.Pending;
+              const isInReview = item.paymentStatus === PaymentStatus.Review;
+              const isReported = item.status === ItemStatus.Denunciado;
+              const isRecovered = item.status === ItemStatus.Recuperado;
+              const isExpanded = expandedItemId === item.qrId;
+              const actionsDisabled = isLocked || isInReview;
 
-                  return (
-                    <div key={item.qrId} className={`relative rounded-xl overflow-hidden transition-all duration-300 ${isReported ? 'border-2 border-red-600 shadow-red-900/20' : isLocked ? 'border border-yellow-600' : 'border border-gray-700'} bg-[#1e2a47] shadow-lg`}>
-                      <div onClick={() => toggleExpand(item.qrId!)} className={`p-4 flex justify-between items-center cursor-pointer ${isReported ? 'bg-red-900/20' : 'active:bg-white/5'}`}>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-bold text-white text-lg leading-none">{item.marca} {item.modelo}</h3>
-                            {isReported && <span className="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded animate-pulse">ROBADO</span>}
-                            {isLocked && <span className="bg-yellow-500 text-black text-[10px] font-black px-2 py-0.5 rounded">IMPAGO</span>}
-                            {isInReview && <span className="bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded animate-pulse">REVISIÓN</span>}
-                          </div>
-                          <p className="text-xs text-blue-300 uppercase font-bold tracking-wider">{item.tipo}</p>
-                        </div>
-                        <div className={`text-gray-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}><svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg></div>
+              // Estilos dinámicos de borde y fondo
+              let cardStyle = "bg-[#111928] border-white/10 hover:border-blue-500/50";
+              let statusBadge = null;
+
+              if (isReported) {
+                cardStyle = "bg-[#1a0505] border-red-600 shadow-red-500/20";
+                statusBadge = <span className="bg-red-600 text-white px-3 py-1 rounded-full text-[10px] font-black tracking-widest animate-pulse shadow-lg shadow-red-500/40">🚨 ROBADO</span>;
+              } else if (isRecovered) {
+                cardStyle = "bg-[#061809] border-green-600 shadow-green-500/20";
+                statusBadge = <span className="bg-green-600 text-white px-3 py-1 rounded-full text-[10px] font-black tracking-widest shadow-lg shadow-green-500/40">✔ RECUPERADO</span>;
+              } else if (isLocked) {
+                cardStyle = "bg-[#1a1500] border-yellow-500 shadow-yellow-500/20";
+                statusBadge = <span className="bg-yellow-500 text-black px-3 py-1 rounded-full text-[10px] font-black tracking-widest">⚠ PAGO PENDIENTE</span>;
+              } else if (isInReview) {
+                cardStyle = "bg-[#0d1226] border-blue-400 animate-pulse";
+                statusBadge = <span className="bg-blue-500 text-white px-3 py-1 rounded-full text-[10px] font-black tracking-widest">⏳ EN REVISIÓN</span>;
+              }
+
+              return (
+                <div key={item.qrId} className={`${glassCardBase} ${cardStyle}`}>
+                  {/* CABECERA DE TARJETA (Siempre visible) */}
+                  <div
+                    onClick={() => toggleExpand(item.qrId!)}
+                    className="p-5 flex justify-between items-start cursor-pointer active:bg-white/5 transition-colors"
+                  >
+                    <div className="flex-1 pr-4">
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {statusBadge}
+                        {!statusBadge && <span className="bg-blue-900/50 text-blue-200 px-3 py-1 rounded-full text-[10px] font-bold tracking-widest border border-blue-500/30">PROTEGIDO</span>}
                       </div>
 
-                      {isExpanded && (
-                        <div className="bg-[#151c32] p-4 border-t border-gray-700 animate-fade-in">
-                          <div className="relative mb-5 flex justify-center">
-                            <div className={`transition-all duration-500 ${actionsDisabled ? 'blur-md opacity-20 grayscale pointer-events-none' : ''}`}><QRCode shortId={item.shortId || '---'} /></div>
-                            {actionsDisabled && (
-                              <div className="absolute inset-0 flex flex-col items-center justify-center z-10 animate-slide-up">
-                                {isLocked ? (
-                                  <button onClick={() => onActivateRequest(item)} className="bg-yellow-500 hover:bg-yellow-400 text-black font-black py-2 px-6 rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95 whitespace-nowrap">ACTIVAR SERVICIO</button>
-                                ) : (
-                                  <div className="bg-blue-900/90 p-3 rounded-xl text-center border border-blue-500 shadow-xl"><p className="text-white font-bold text-xs">⏳ Verificando Pago</p></div>
-                                )}
+                      <h3 className="text-white font-extrabold text-xl leading-tight mb-1">
+                        {item.marca}
+                      </h3>
+                      <p className="text-gray-400 font-medium text-sm">{item.modelo}</p>
+                      <p className="text-xs text-blue-400 font-bold uppercase tracking-wider mt-2 border-l-2 border-blue-500 pl-2">
+                        {item.tipo}
+                      </p>
+                    </div>
+
+                    <div className={`w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 transition-transform duration-300 ${isExpanded ? 'rotate-180 bg-white/10 text-white' : ''}`}>
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* CONTENIDO EXPANDIBLE (Detalles y Acciones) */}
+                  {isExpanded && (
+                    <div className="bg-black/20 p-5 border-t border-white/5 animate-fade-in space-y-5">
+
+                      {/* 1. ÁREA DE QR (Credencial) */}
+                      <div className="flex flex-col items-center justify-center p-4 bg-white/5 rounded-xl border border-white/5 relative overflow-hidden group">
+                        <div className={`transition-all duration-300 transform group-hover:scale-105 ${actionsDisabled ? 'blur-sm opacity-30 grayscale' : ''}`}>
+                          <QRCode shortId={item.shortId || '---'} />
+                        </div>
+                        <p className="mt-3 text-[10px] font-mono text-gray-500 tracking-[0.2em]">{item.shortId || "SIN ID"}</p>
+
+                        {/* Overlay de Bloqueo (Si aplica) */}
+                        {actionsDisabled && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
+                            {isLocked ? (
+                              <button onClick={() => onActivateRequest(item)} className="bg-yellow-500 hover:bg-yellow-400 text-black font-black py-2 px-6 rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95 text-xs">
+                                ACTIVAR AHORA
+                              </button>
+                            ) : (
+                              <div className="bg-blue-600 px-4 py-2 rounded-full shadow-lg">
+                                <p className="text-white font-bold text-xs">Verificando...</p>
                               </div>
                             )}
                           </div>
+                        )}
+                      </div>
 
-                          <div className="flex flex-col gap-3">
-                            <div className="grid grid-cols-2 gap-3">
-                              <button onClick={() => onViewRequest(item)} className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/50 py-3 rounded-lg font-bold text-xs transition-colors">VER DETALLES</button>
-                              <button
-                                onClick={() => !actionsDisabled && onEditRequest(item)}
-                                disabled={actionsDisabled}
-                                className={`py-3 rounded-lg font-bold text-xs transition-colors ${actionsDisabled ? 'bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700' : 'bg-gray-700 hover:bg-gray-600 text-white'}`}
-                              >
-                                {actionsDisabled ? 'EDITAR (Bloq.)' : 'EDITAR'}
-                              </button>
-                            </div>
+                      {/* 2. BOTONES DE ACCIÓN (Grid) */}
+                      {!actionsDisabled && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <button onClick={() => onViewRequest(item)} className="col-span-1 bg-[#1e2a47] hover:bg-[#2a3b5e] border border-white/10 text-blue-200 py-3 rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2">
+                            📄 DETALLES
+                          </button>
+                          <button onClick={() => onEditRequest(item)} className="col-span-1 bg-[#1e2a47] hover:bg-[#2a3b5e] border border-white/10 text-gray-200 py-3 rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2">
+                            ✏️ EDITAR
+                          </button>
 
-                            {!actionsDisabled && (
+                          {/* Botón Actualizar GPS */}
+                          <button onClick={() => handleUpdateLocation(item)} disabled={!!processingId} className="col-span-2 bg-gradient-to-r from-blue-900/50 to-cyan-900/50 hover:from-blue-800/50 hover:to-cyan-800/50 border border-blue-500/30 text-blue-300 py-3 rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                            ACTUALIZAR UBICACIÓN
+                          </button>
+
+                          {/* BOTÓN DE EMERGENCIA (ROJO/VERDE) */}
+                          <button
+                            onClick={() => initiateToggleStatus(item)}
+                            disabled={!!processingId}
+                            className={`col-span-2 py-4 rounded-xl font-black text-sm shadow-lg transition-transform active:scale-[0.98] flex items-center justify-center gap-2 border border-white/20
+                              ${isReported
+                                ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white shadow-green-500/20'
+                                : 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-red-500/20'}`}
+                          >
+                            {processingId === item.qrId ? <Spinner /> : (
                               <>
-                                <button onClick={() => handleUpdateLocation(item)} disabled={!!processingId} className="w-full py-3 bg-blue-900/40 border border-blue-500/30 hover:bg-blue-900/60 text-blue-300 rounded-lg font-bold text-xs flex justify-center items-center gap-2 transition-colors">
-                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                  ACTUALIZAR UBICACIÓN (PARA MAPA)
-                                </button>
-                                <button onClick={() => initiateToggleStatus(item)} disabled={!!processingId} className={`w-full py-4 rounded-xl font-black text-sm shadow-lg transition-transform active:scale-[0.98] flex justify-center items-center gap-2 ${isReported ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-red-600 hover:bg-red-500 text-white'}`}>
-                                  {processingId === item.qrId ? <Spinner /> : (isReported ? "MARCAR COMO RECUPERADO" : "🚨 DENUNCIAR ROBO")}
-                                </button>
+                                <span className="text-xl">{isReported ? "👍" : "🚨"}</span>
+                                {isReported ? "YA LO TENGO (RECUPERADO)" : "DENUNCIAR ROBO"}
                               </>
                             )}
-                            <button onClick={() => initiateDelete(item)} className="mt-2 text-red-500/50 hover:text-red-500 text-[10px] uppercase font-bold tracking-widest text-center py-2">Eliminar del sistema</button>
-                          </div>
+                          </button>
                         </div>
                       )}
+
+                      {/* Botón Eliminar (Discreto) */}
+                      <div className="pt-2 border-t border-white/5 flex justify-center">
+                        <button onClick={() => initiateDelete(item)} className="text-red-500/40 hover:text-red-400 text-[10px] uppercase font-bold tracking-[0.2em] transition-colors">
+                          ELIMINAR DEL SISTEMA
+                        </button>
+                      </div>
+
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

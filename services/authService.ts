@@ -19,17 +19,25 @@ export const signUpWithEmail = async (nombre: string, email: string, password: s
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
-    // Save user info to Firestore
+
+    // Guardar nombre en el perfil de Auth
+    await updateProfile(user, { displayName: nombre });
+
+    // Guardar información en Firestore (QR Seguro)
     await setDoc(doc(db, "Users", user.uid), {
       userId: user.uid,
       email: user.email,
       nombreCompleto: nombre,
-    });
+    }, { merge: true });
+
+    // ENVIAR VERIFICACIÓN AUTOMÁTICA
+    await sendEmailVerification(user);
+
+    // CERRAR SESIÓN para obligar re-ingreso verificado (Blindaje ComprAren)
+    await signOut(auth);
+
     return user;
   } catch (error) {
-    const code = (error as any).code || 'UNKNOWN_SIGNUP_ERROR';
-    const message = (error instanceof Error) ? error.message : String(error);
-    console.error(`Error signing up: [${code}] ${message}`);
     throw error;
   }
 };
@@ -37,11 +45,16 @@ export const signUpWithEmail = async (nombre: string, email: string, password: s
 export const signInWithEmail = async (email: string, password: string): Promise<User> => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    return userCredential.user;
+    const user = userCredential.user;
+
+    // LOGIN CON FILTRO DE VERIFICACIÓN (Solo para QR seguro)
+    if (!user.emailVerified) {
+      await signOut(auth);
+      throw new Error("🔒 Debes verificar tu correo electrónico para acceder a QR Seguro.");
+    }
+
+    return user;
   } catch (error) {
-    const code = (error as any).code || 'UNKNOWN_SIGNIN_ERROR';
-    const message = (error instanceof Error) ? error.message : String(error);
-    console.error(`Error signing in: [${code}] ${message}`);
     throw error;
   }
 };
@@ -115,4 +128,13 @@ export const updateUserProfileDisplayName = async (user: User, displayName: stri
     console.error("Error updating profile display name:", error);
     throw error;
   }
+};
+
+// --- HOOK DE COMPATIBILIDAD ---
+
+export const useAuth = () => {
+  return {
+    loginWithGoogle: signInWithGoogle,
+    // Agrega aquí más funciones si el diseño las requiere a futuro
+  };
 };

@@ -4,11 +4,11 @@ import { auth } from './firebaseConfig';
 
 // CONTEXTOS Y NUEVOS SCREENS
 import { ToastProvider } from './context/ToastContext';
-import LoginScreenModern from './screens/LoginScreenModern';
+import LoginScreen from './screens/LoginScreen';
 import UserProfileModern from './components/UserProfileModern';
 
 // COMPONENTES Y SCREENS EXISTENTES
-import HomeScreen from './screens/HomeScreen';
+import HomeScreen from './screens/HomeScreen.tsx';
 import MapScreen from './screens/MapScreen';
 import MyItemsScreen from './screens/MyItemsScreen';
 import ScanScreen from './screens/ScanScreen';
@@ -58,7 +58,7 @@ const App: React.FC = () => {
             onScanRequest={() => setActiveScreen(Screen.Scan)}
             onInputCodeRequest={() => setActiveScreen(Screen.InputCode)}
             onNavigate={setActiveScreen}
-            onPublicNavigate={(p) => {
+            onPublicNavigate={(p: string) => {
               if (p === '/denuncias') setActiveScreen(Screen.PUBLIC_REPORTED);
               else if (p.startsWith('/denuncias/')) {
                 const id = p.split('/denuncias/')[1];
@@ -129,6 +129,7 @@ const App: React.FC = () => {
         return (
           <EditItemScreen
             item={selectedItem!}
+            user={user!}
             onCancel={() => setActiveScreen(Screen.MyItems)}
             onEditComplete={() => setActiveScreen(Screen.MyItems)}
           />
@@ -207,7 +208,7 @@ const App: React.FC = () => {
         return <AdminPaymentsScreen onMenuClick={() => setIsMenuOpen(true)} />;
 
       default:
-        return <HomeScreen onScanRequest={() => setActiveScreen(Screen.Scan)} onInputCodeRequest={() => setActiveScreen(Screen.InputCode)} onNavigate={setActiveScreen} onPublicNavigate={(_) => setActiveScreen(Screen.PUBLIC_REPORTED)} onMenuClick={() => setIsMenuOpen(true)} />;
+        return <HomeScreen onScanRequest={() => setActiveScreen(Screen.Scan)} onInputCodeRequest={() => setActiveScreen(Screen.InputCode)} onNavigate={setActiveScreen} onPublicNavigate={(_: string) => setActiveScreen(Screen.PUBLIC_REPORTED)} onMenuClick={() => setIsMenuOpen(true)} />;
     }
   };
 
@@ -217,7 +218,7 @@ const App: React.FC = () => {
     <ToastProvider>
       <div className="h-full w-full bg-[#0d1226] overflow-hidden flex flex-col font-sans text-white fixed inset-0">
         {!user ? (
-          <LoginScreenModern />
+          <LoginScreen />
         ) : (
           <>
             {/* Header de Usuario Premium (Nombre, Email y Salir) */}
@@ -227,17 +228,17 @@ const App: React.FC = () => {
                   {user.displayName?.charAt(0) || user.email?.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex flex-col min-w-0">
-                  <span className="text-[11px] font-black text-white tracking-widest truncate uppercase italic leading-tight">
+                  <span className="text-[13px] font-black text-white tracking-widest truncate uppercase italic leading-tight">
                     {user.displayName || 'Usuario'}
                   </span>
-                  <span className="text-[8px] font-bold text-white/30 tracking-tight truncate italic leading-tight">
+                  <span className="text-[10px] font-bold text-white/40 tracking-tight truncate italic leading-tight">
                     {user.email}
                   </span>
                 </div>
               </div>
               <button
                 onClick={() => auth.signOut()}
-                className="bg-red-600/90 hover:bg-red-500 text-white text-[9px] font-black px-4 py-2 rounded-lg uppercase transition-all active:scale-90 shadow-[0_0_15px_rgba(220,38,38,0.3)] shrink-0"
+                className="bg-red-600/90 hover:bg-red-500 text-white text-[11px] font-black px-4 py-2 rounded-lg uppercase transition-all active:scale-90 shadow-[0_0_15px_rgba(220,38,38,0.3)] shrink-0"
               >
                 Salir
               </button>
@@ -283,5 +284,6 @@ const App: React.FC = () => {
     </ToastProvider>
   );
 };
+
 
 export default App;
