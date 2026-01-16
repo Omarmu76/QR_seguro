@@ -246,6 +246,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     return Array.from(allItemsMap.values());
   }, [myItems, publicItems, filterMode]);
 
+  const center = isValidCoords(userPos) ? userPos : (isValidCoords(initPos) ? initPos : { lat: -34.6037, lng: -58.3816 });
+
   const markerElements = useMemo(() => {
     return displayedItems
       .filter(item => item.qrId) // Solo renderizar si tiene ID (Evita errores de key)
@@ -253,11 +255,17 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
         const isRecuperado = item.status === ItemStatus.Recuperado || String(item.status).toUpperCase() === 'RECUPERADO';
         const isDenunciado = item.status === ItemStatus.Denunciado || String(item.status).toUpperCase() === 'DENUNCIADO';
 
+        // 1. DETECCIÓN DE VINCULACIÓN (Ley del Imán)
+        const isLinkedDevice = item.trackingType === 'SELF_DEVICE';
+
         // Lógica robusta de posición
         let position = item.location;
 
-        // Si no hay señal en vivo, intentar usar la ubicación de recuperación
-        if (!position && item.recoveryLocation) {
+        // Si es un dispositivo vinculado, forzamos su posición al GPS actual (El Imán)
+        if (isLinkedDevice && center) {
+          position = center;
+        } else if (!position && item.recoveryLocation) {
+          // Si no hay señal en vivo, intentar usar la ubicación de recuperación
           const statusStr = (item.status || '').toUpperCase();
           if (statusStr !== 'DENUNCIADO' && statusStr !== 'ROBADO') {
             position = item.recoveryLocation;
@@ -272,7 +280,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
         if (item.ownerId !== user.uid) icon = purpleIcon;
 
         return (
-          <Marker key={`item-${item.qrId}`} position={position} icon={icon}>
+          <Marker key={`item-${item.qrId}`} position={[position.lat, position.lng]} icon={icon}>
             <Popup className="classic-popup" closeButton={false}>
               <div className={`flex flex-col items-center min-w-[150px] p-3 text-center rounded-lg border-2 shadow-xl bg-white ${isDenunciado ? 'border-red-600' : 'border-blue-600'}`}>
                 <div className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-2 text-white shadow-sm ${isDenunciado ? 'bg-red-600 animate-pulse' : shouldShowGreen ? 'bg-green-600' : 'bg-blue-600'}`}>
@@ -288,7 +296,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
           </Marker>
         );
       }).filter(Boolean);
-  }, [displayedItems, user.uid]);
+  }, [displayedItems, user.uid, center]);
 
   const visibleSentries = activeSentries.filter(s => {
     if (!vigiaMode) return false;
@@ -297,7 +305,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   });
 
   if (!initPos && !userPos) return <div className="h-full flex items-center justify-center bg-[#0d1226] text-white"><Spinner /></div>;
-  const center = isValidCoords(userPos) ? userPos : (isValidCoords(initPos) ? initPos : { lat: -34.6037, lng: -58.3816 });
 
   // UI CLASES
   const glassCardClass = "bg-[#111928]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6 w-full max-w-sm flex flex-col items-center animate-fade-in";

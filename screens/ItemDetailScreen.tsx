@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Header from '../components/Header';
 import QRCode from '../components/QRCode';
 import { Item, ItemStatus } from '../types';
-import { updateItemStatus } from '../services/itemService';
+import { updateItemStatus, updateItem } from '../services/itemService';
 import Spinner from '../components/Spinner';
 import ConfirmationModal from '../components/common/ConfirmationModal';
 
@@ -94,6 +94,27 @@ const ItemDetailScreen: React.FC<ItemDetailScreenProps> = ({ item, onDone }) => 
     }
   };
 
+  const handleLinkToDevice = async () => {
+    if (!item?.qrId) return;
+    try {
+      const deviceId = localStorage.getItem('qr_device_id') || `dev_${Date.now()}`;
+      localStorage.setItem('qr_device_id', deviceId);
+
+      // Actualizamos el ítem para que sea 'SELF_DEVICE' (El Imán)
+      await updateItem(item.qrId, {
+        trackingType: 'SELF_DEVICE',
+        linkedDeviceId: deviceId,
+        // No cambiamos otros campos para no perder info
+      });
+
+      alert("✅ Vinculado: Este ítem ahora seguirá la ubicación de este celular.");
+      if (onDone) onDone(); // Opcional: Volver para refrescar
+    } catch (error) {
+      console.error("Error al vincular:", error);
+      alert("No se pudo vincular el dispositivo.");
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#0d1226] text-white overflow-hidden">
       <Header title="DETALLE" onMenuClick={() => { }} onBack={onDone} transparent={false} />
@@ -128,7 +149,7 @@ const ItemDetailScreen: React.FC<ItemDetailScreenProps> = ({ item, onDone }) => 
           {/* QR CODE (Centro de atención) */}
           <div className="flex flex-col items-center justify-center py-2">
             <div className="p-3 bg-white rounded-xl shadow-lg transform transition-transform hover:scale-105">
-              <QRCode shortId={item.shortId || 'error'} canvasId={qrCanvasId} size={140} />
+              <QRCode shortId={item.shortId || 'error'} canvasId={qrCanvasId} />
             </div>
             <p className="mt-3 text-[10px] font-mono text-gray-500 tracking-[0.3em]">
               ID: <span className="text-blue-400">{item.shortId || '---'}</span>
@@ -159,7 +180,7 @@ const ItemDetailScreen: React.FC<ItemDetailScreenProps> = ({ item, onDone }) => 
           <div>
             <p className={labelClass}>NOTAS / DESCRIPCIÓN</p>
             <div className={`min-h-[60px] ${valueClass} text-gray-300 italic`}>
-              {item.description || item.descripcion || "Sin descripción adicional."}
+              {item.description || "Sin descripción adicional."}
             </div>
           </div>
 
@@ -179,6 +200,15 @@ const ItemDetailScreen: React.FC<ItemDetailScreenProps> = ({ item, onDone }) => 
             >
               COMPARTIR QR
             </button>
+
+            {item?.trackingType !== 'SELF_DEVICE' && (
+              <button
+                onClick={handleLinkToDevice}
+                className="w-full mt-4 py-3 px-4 bg-yellow-500/10 border border-yellow-500/50 rounded-xl flex items-center justify-center gap-2 text-yellow-400 font-bold tracking-wide hover:bg-yellow-500/20 transition-all"
+              >
+                <span>📍</span> USAR GPS DE ESTE DISPOSITIVO
+              </button>
+            )}
 
             <button
               onClick={onDone}
