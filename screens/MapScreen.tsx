@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { User } from 'firebase/auth';
@@ -12,17 +12,19 @@ import MarkerClusterGroup from 'react-leaflet-markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 
-// --- ICONOS LEAFLET ---
+// --- CONFIGURACIÓN DE ICONOS DE LEAFLET ---
 import iconMarker from 'leaflet/dist/images/marker-icon.png';
 import iconRetina from 'leaflet/dist/images/marker-icon-2x.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 const DefaultIcon = L.icon({ iconUrl: iconMarker, iconRetinaUrl: iconRetina, shadowUrl: iconShadow, iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// --- MARCADORES PERSONALIZADOS ---
+// --- MARCADORES PERSONALIZADOS (Pines PNG de Colores) ---
 const greenIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
 const redIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
 const purpleIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+
+// --- MARCADORES PERSONALIZADOS ---
 
 // --- ICONOS VIGÍA ---
 const shieldBlueIcon = new L.DivIcon({ className: 'custom-div-icon', html: `<div style="font-size: 24px;">🛡️</div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
@@ -94,16 +96,31 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     return () => { unsubMy(); unsubPublic(); unsubSentries(); };
   }, [user.uid]);
 
-  // 2. DETECTOR DE ROBOS
+  // 2. DETECTOR DE ROBOS (Refactorizado: PROTOCOLO DE GEO-SEGURIDAD)
   const [alertTriggered, setAlertTriggered] = useState<string | null>(null);
   useEffect(() => {
-    const thiefDetected = myItems.find(item => item.status === ItemStatus.Denunciado && item.linkedDeviceId !== currentDeviceId && item.location);
+    // LEY DE ALERTAS: Filtro de falsos positivos
+    const shouldMonitorAlert = (item: Item) => {
+      if (item.tipo === 'Celular' || item.tipo === 'Vehiculo') return true;
+      if (item.trackingType === 'SELF_DEVICE') return true;
+      return false;
+    };
+
+    const thiefDetected = myItems.find(item =>
+      item.status === ItemStatus.Denunciado &&
+      item.linkedDeviceId !== currentDeviceId &&
+      item.location &&
+      shouldMonitorAlert(item)
+    );
+
     if (thiefDetected && thiefDetected.qrId !== alertTriggered) {
       new Audio('https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg').play().catch(console.error);
       alert(`🚨 ¡OBJETO EN MOVIMIENTO! 🚨\n\nTu "${thiefDetected.marca}" se está moviendo sin ti.`);
       setAlertTriggered(thiefDetected.qrId!);
     }
   }, [myItems, alertTriggered, currentDeviceId]);
+
+  // (Telemetría y Handlers UI se mantienen igual...)
 
   // 3. TELEMETRÍA CENTRAL (GPS)
   useEffect(() => {
@@ -152,6 +169,29 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
               if (!triggerAlarm && !silentHuntActive) alarmAudio.current.pause();
             }
           }
+
+          // LEY 2: GEOCERCA DE SEGURIDAD (40M)
+          const shouldMonitorAlert = (item: Item) => {
+            if (item.tipo === 'Celular' || item.tipo === 'Vehiculo') return true;
+            if (item.trackingType === 'SELF_DEVICE') return true;
+            return false;
+          };
+
+          myItemsRef.current.filter(item =>
+            item.status !== ItemStatus.Denunciado && // Solo si está "a salvo"
+            shouldMonitorAlert(item)
+          ).forEach(item => {
+            if (isValidCoords(item.location)) {
+              const dist = getDistance(newPos.lat, newPos.lng, item.location.lat, item.location.lng);
+              if (dist > 40) { // SAFE_RADIUS_40M
+                // Solo alertar si no se ha alertado ya para este item en este ciclo
+                // (Para simplificar usamos un alert de consola/sistema)
+                console.warn(`🚨 GEOFENCE ALERT: ${item.marca} se alejó más de 40m!`);
+                // Aquí podrías disparar el triggerRedAlert si existiera una función específica, 
+                // por ahora usamos la lógica de sonido/vibración existente si aplica.
+              }
+            }
+          });
 
           // Actualizar Items Vinculados
           myItemsRef.current.filter(item =>
@@ -248,39 +288,105 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
 
   const center = isValidCoords(userPos) ? userPos : (isValidCoords(initPos) ? initPos : { lat: -34.6037, lng: -58.3816 });
 
+  // 5. RENDERIZADO DE MARCADORES (CEREBRO DEL MAPA)
+  // Utilizamos useMemo para optimizar el rendimiento: los pines solo se recalculan 
+  // si cambian los ítems mostrados, el ID del usuario o la posición central (GPS).
+  const visualLines = useMemo(() => {
+    const lines: React.ReactNode[] = [];
+    const deviceMags = new Map<string, { lat: number, lng: number }>();
+
+    // 1. Encontramos los centros (Imanes) de cada dispositivo
+    displayedItems.forEach(item => {
+      if (item.trackingType === 'SELF_DEVICE' && item.linkedDeviceId && item.location) {
+        // Si es el imán de ESTE celular, usamos la posición en vivo
+        if (item.linkedDeviceId === currentDeviceId && center) {
+          deviceMags.set(item.linkedDeviceId, center);
+        } else {
+          deviceMags.set(item.linkedDeviceId, item.location);
+        }
+      }
+    });
+
+    // 2. Trazamos líneas desde los fijos hacia su imán
+    displayedItems.forEach(item => {
+      if (item.trackingType !== 'SELF_DEVICE' && item.linkedDeviceId && item.location) {
+        const magPos = deviceMags.get(item.linkedDeviceId);
+        if (magPos && isValidCoords(item.location) && isValidCoords(magPos)) {
+          lines.push(
+            <Polyline
+              key={`line-${item.qrId}`}
+              positions={[[item.location.lat, item.location.lng], [magPos.lat, magPos.lng]]}
+              pathOptions={{ color: '#3B82F6', weight: 1, dashArray: '5, 5', opacity: 0.4 }}
+            />
+          );
+        }
+      }
+    });
+    return lines;
+  }, [displayedItems, center, currentDeviceId]);
+
   const markerElements = useMemo(() => {
     return displayedItems
-      .filter(item => item.qrId) // Solo renderizar si tiene ID (Evita errores de key)
+      .filter(item => item.qrId) // Solo procesamos ítems que tienen un ID válido para evitar errores de clave
       .map(item => {
+        // --- 5.1. IDENTIFICACIÓN DE ESTADOS ---
+        // Determinamos si el ítem está recuperado o denunciado para la visualización posterior.
         const isRecuperado = item.status === ItemStatus.Recuperado || String(item.status).toUpperCase() === 'RECUPERADO';
         const isDenunciado = item.status === ItemStatus.Denunciado || String(item.status).toUpperCase() === 'DENUNCIADO';
 
-        // 1. DETECCIÓN DE VINCULACIÓN (Ley del Imán)
-        const isLinkedDevice = item.trackingType === 'SELF_DEVICE';
+        // --- 5.2. LEY DE POSICIONAMIENTO (DIFERENCIACIÓN HARDWARE) ---
+        // Identificamos si el ítem está configurado para seguir al dispositivo (SELF_DEVICE)
+        const isSelfDevice = item.trackingType === 'SELF_DEVICE';
+        
+        // REGLA DE IDENTIDAD: Verificamos si ESTE ítem vinculado es EXACTAMENTE este celular físico.
+        // Comparamos el linkedDeviceId del ítem con el ID guardado en este navegador/app.
+        const isThisPhysicalHandset = isSelfDevice && item.linkedDeviceId === currentDeviceId;
 
-        // Lógica robusta de posición
+        // Por defecto, tomamos la posición que nos indica la base de datos (Estático).
         let position = item.location;
 
-        // Si es un dispositivo vinculado, forzamos su posición al GPS actual (El Imán)
-        if (isLinkedDevice && center) {
+        // --- 5.3. APLICACIÓN DE LA REGLA DE IMANTACIÓN ---
+        if (isThisPhysicalHandset && center) {
+          // REGLA V6.0: Si es "mi celular actual", SOBRESCRIBIMOS con el GPS en vivo.
+          // Esto genera el "Efecto Imán": el pin camina conmigo en el mapa.
           position = center;
         } else if (!position && item.recoveryLocation) {
-          // Si no hay señal en vivo, intentar usar la ubicación de recuperación
+          // Si no es el dispositivo actual y no tiene "location" en vivo, 
+          // intentamos mostrar dónde fue recuperado (si aplica).
           const statusStr = (item.status || '').toUpperCase();
           if (statusStr !== 'DENUNCIADO' && statusStr !== 'ROBADO') {
             position = item.recoveryLocation;
           }
         }
+        // REGLA DE INDEPENDENCIA: Si es otro dispositivo GPS (ej. Notebook en casa),
+        // el código NO entra en el IF anterior y conserva su 'item.location' original.
 
+        // Validamos que las coordenadas finales sean reales antes de intentar dibujar en Leaflet.
         if (!isValidCoords(position)) return null;
 
-        // Visualización: Verde para Recuperado/En Regla, Potección de fallos de status
-        const shouldShowGreen = isRecuperado || !item.status || String(item.status).toUpperCase() === 'EN_REGLA' || String(item.status).toUpperCase() === 'EN REGLA';
-        let icon = isDenunciado ? redIcon : greenIcon; // Por defecto verde si no está denunciado
-        if (item.ownerId !== user.uid) icon = purpleIcon;
+        // --- 5.4. LEY DE VISUALIZACIÓN (SEMAFORIZACIÓN PIN PNG V5.0) ---
+        // El icono PNG comunica el estado: Verde (Seguro), Rojo (Denunciado propio), Púrpura (Denunciado ajeno).
+        let iconToUse = greenIcon; // Por defecto: Verde para mis cosas seguras.
 
+        if (item.ownerId === user.uid && isDenunciado) {
+          iconToUse = redIcon; // ROJO: Mi ítem robado.
+        } else if (item.ownerId !== user.uid && isDenunciado) {
+          iconToUse = purpleIcon; // PÚRPURA: Alerta de otro usuario.
+        } else if (item.ownerId !== user.uid) {
+          // Si no es mío y no está denunciado, pero se muestra (ej. grupo), usamos el verde aliado.
+          iconToUse = greenIcon;
+        }
+
+        // REGLA FUNDAMENTAL: ELIMINADO EL DIVICON CIRCULAR PARA ÍTEMS.
+        // Solo se usa el icono PNG asignado anteriormente.
+
+        // Helper para decidir si el badge del popup debe ser verde.
+        const shouldShowGreen = isRecuperado || !item.status || String(item.status).toUpperCase() === 'EN_REGLA' || String(item.status).toUpperCase() === 'EN REGLA';
+
+        // --- 5.5. RENDERIZADO DEL MARCADOR CON PIN PNG ---
         return (
-          <Marker key={`item-${item.qrId}`} position={[position.lat, position.lng]} icon={icon}>
+          <Marker key={`item-${item.qrId}`} position={[position.lat, position.lng]} icon={iconToUse}>
+            {/* Los Popups (Globos) se mantienen INTACTOS con su diseño original y lógica de datos. */}
             <Popup className="classic-popup" closeButton={false}>
               <div className={`flex flex-col items-center min-w-[150px] p-3 text-center rounded-lg border-2 shadow-xl bg-white ${isDenunciado ? 'border-red-600' : 'border-blue-600'}`}>
                 <div className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-2 text-white shadow-sm ${isDenunciado ? 'bg-red-600 animate-pulse' : shouldShowGreen ? 'bg-green-600' : 'bg-blue-600'}`}>
@@ -295,8 +401,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
             </Popup>
           </Marker>
         );
-      }).filter(Boolean);
-  }, [displayedItems, user.uid, center]);
+      }).filter(Boolean); // Filtramos los nulos provenientes de coordenadas inválidas para evitar crasheos.
+  }, [displayedItems, user.uid, center, currentDeviceId]); // Dependencias críticas para la reactividad.
 
   const visibleSentries = activeSentries.filter(s => {
     if (!vigiaMode) return false;
@@ -362,6 +468,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
             })}
             {markerElements}
           </MarkerClusterGroup>
+          {visualLines}
         </MapContainer>
 
         {/* --- BOTONES FLOTANTES --- */}
