@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Header from '../components/Header';
 import QRCode from '../components/QRCode';
 import { Item, ItemStatus } from '../types';
-import { updateItemStatus, updateItem } from '../services/itemService';
+import { updateItemStatus, linkDeviceToItem } from '../services/itemService';
 import Spinner from '../components/Spinner';
 import ConfirmationModal from '../components/common/ConfirmationModal';
 
@@ -100,15 +100,11 @@ const ItemDetailScreen: React.FC<ItemDetailScreenProps> = ({ item, onDone }) => 
       const deviceId = localStorage.getItem('qr_device_id') || `dev_${Date.now()}`;
       localStorage.setItem('qr_device_id', deviceId);
 
-      // Actualizamos el ítem para que sea 'SELF_DEVICE' (El Imán)
-      await updateItem(item.qrId, {
-        trackingType: 'SELF_DEVICE',
-        linkedDeviceId: deviceId,
-        // No cambiamos otros campos para no perder info
-      });
+      // Usamos el servicio que garantiza un solo imán por dispositivo
+      await linkDeviceToItem(item.ownerId, item.qrId, deviceId);
 
-      alert("✅ Vinculado: Este ítem ahora seguirá la ubicación de este celular.");
-      if (onDone) onDone(); // Opcional: Volver para refrescar
+      alert("✅ Vinculado: Este ítem es ahora el IDENTIFICADOR GPS de este celular.");
+      if (onDone) onDone();
     } catch (error) {
       console.error("Error al vincular:", error);
       alert("No se pudo vincular el dispositivo.");

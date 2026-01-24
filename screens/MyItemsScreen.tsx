@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User } from 'firebase/auth';
-import { getAllUserItems, deleteItem, updateItemStatus, updateItemLocation } from '../services/itemService';
+import { getAllUserItems, deleteItem, updateItemStatus, updateItem } from '../services/itemService';
 import { Item, PaymentStatus, ItemStatus } from '../types';
 import Spinner from '../components/Spinner';
 import QRCode from '../components/QRCode';
@@ -104,9 +104,17 @@ const MyItemsScreen: React.FC<MyItemsScreenProps> = ({ user, onMenuClick, onEdit
     setProcessingId(item.qrId);
     try {
       const location = await getRobustLocation();
+      const currentDeviceId = localStorage.getItem('qr_device_id') || `dev_${Date.now()}`;
+      localStorage.setItem('qr_device_id', currentDeviceId);
+
       if (item.qrId) {
-        await updateItemLocation(item.qrId, location.lat, location.lng);
-        alert("📍 Ubicación actualizada exitosamente.");
+        // Actualizamos ubicación Y el ID del dispositivo vinculado para "mudarlo" al cúmulo actual
+        await updateItem(item.qrId, {
+          location: { lat: location.lat, lng: location.lng },
+          locationTimestamp: Date.now(),
+          linkedDeviceId: currentDeviceId
+        });
+        alert("📍 Ubicación actualizada y vinculado a este dispositivo.");
         await fetchItems();
       }
     } catch (error: any) { alert(error.message || "Error de GPS."); } finally { setProcessingId(null); }

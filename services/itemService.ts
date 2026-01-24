@@ -372,3 +372,37 @@ export const updateItem = async (itemId: string, updateData: Partial<Item>): Pro
         throw error;
     }
 };
+
+export const linkDeviceToItem = async (userId: string, itemId: string, deviceId: string): Promise<void> => {
+    try {
+        const itemsRef = collection(db, "Items");
+        const q = query(itemsRef, 
+            where("ownerId", "==", userId), 
+            where("linkedDeviceId", "==", deviceId), 
+            where("trackingType", "==", "SELF_DEVICE")
+        );
+        const querySnapshot = await getDocs(q);
+        
+        const batch = writeBatch(db);
+        
+        // 1. Desactivamos cualquier otro imán previo en este dispositivo
+        querySnapshot.forEach((doc) => {
+            if (doc.id !== itemId) {
+                batch.update(doc.ref, { trackingType: 'PASSIVE' });
+            }
+        });
+        
+        // 2. Activamos el nuevo imán
+        const newItemRef = doc(db, "Items", itemId);
+        batch.update(newItemRef, { 
+            trackingType: 'SELF_DEVICE', 
+            linkedDeviceId: deviceId,
+            // Al vincularlo como imán, tomamos la posición actual si es posible (se hará desde el componente)
+        });
+        
+        await batch.commit();
+    } catch (error) {
+        console.error("Error in linkDeviceToItem:", error);
+        throw error;
+    }
+};
