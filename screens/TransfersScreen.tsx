@@ -1,23 +1,26 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User } from 'firebase/auth';
-import { TransferRequest, TransferStatus } from '../types';
-import { getPendingTransfers, getSentTransfers, approveTransfer, rejectTransfer, cancelTransfer } from '../services/itemService';
+import { TransferRequest, TransferStatus, Item, ItemStatus } from '../types';
+import { getPendingTransfers, getSentTransfers, approveTransfer, rejectTransfer, cancelTransfer, getAllUserItems } from '../services/itemService';
 import Spinner from '../components/Spinner';
 
 interface TransfersScreenProps {
   user: User;
   onMenuClick: () => void;
-  // Nuevas props para iniciar transferencia desde aquí
   onScanRequest: () => void;
   onInputCodeRequest: () => void;
 }
 
 const TransfersScreen: React.FC<TransfersScreenProps> = ({ user, onMenuClick, onScanRequest, onInputCodeRequest }) => {
-  const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
+  const [activeTab, setActiveTab] = useState<'items' | 'received' | 'sent'>('items');
   const [receivedRequests, setReceivedRequests] = useState<TransferRequest[]>([]);
   const [sentRequests, setSentRequests] = useState<TransferRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // --- LÓGICA DE COMPARTIR ---
+  const [selectedForShare, setSelectedForShare] = useState<Item | null>(null);
+  const [myItems, setMyItems] = useState<Item[]>([]);
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
@@ -38,6 +41,18 @@ const TransfersScreen: React.FC<TransfersScreenProps> = ({ user, onMenuClick, on
   useEffect(() => {
     fetchRequests();
   }, [fetchRequests]);
+
+  useEffect(() => {
+    const fetchMyItems = async () => {
+      try {
+        const items = await getAllUserItems(user.uid);
+        setMyItems(items.filter(i => i.status === ItemStatus.EnRegla));
+      } catch (e) {
+        console.error("Error fetching my items:", e);
+      }
+    };
+    fetchMyItems();
+  }, [user.uid]);
 
   const handleApprove = async (req: TransferRequest) => {
     if (!window.confirm("¿Confirmas que recibiste el pago y deseas transferir la propiedad?")) return;
@@ -80,125 +95,255 @@ const TransfersScreen: React.FC<TransfersScreenProps> = ({ user, onMenuClick, on
     }
   };
 
-  return (
-    <div className="flex flex-col h-full bg-[#0d1226] text-white">
-      {/* HEADER */}
-      <div className="bg-[#1e2a47] p-4 flex justify-between items-center shadow-md">
-        <button onClick={onMenuClick} className="p-2">
-          <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
-        </button>
-        <h1 className="text-lg font-bold uppercase tracking-wider text-yellow-400">Transferencias</h1>
-        <div className="w-8"></div>
-      </div>
+  const handleShareWhatsApp = (item: Item) => {
+    const text = `Hola, para recibir mi ${item.marca}, ingresa el código: ${item.shortId} en la sección Transferencias de la App QRSEGURO.`;
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
 
-      {/* BOTÓN DE ACCIÓN RÁPIDA (COMPRAR) */}
-      <div className="p-4 bg-gradient-to-r from-blue-900 to-[#0d1226] border-b border-gray-700">
-        <h3 className="text-sm text-gray-400 mb-2 uppercase font-bold text-center">¿Quieres recibir/comprar un artículo?</h3>
-        <div className="flex gap-3">
-          <button onClick={onScanRequest} className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
-            ESCANEAR QR
-          </button>
-          <button onClick={onInputCodeRequest} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors">
-            ABC-123
-          </button>
+  return (
+    <div className="w-full h-full bg-black flex justify-center items-center relative overflow-hidden font-sans">
+      {/* Columna Izquierda (Espacio Premium) */}
+      <div className="hidden lg:flex flex-1 h-full bg-gradient-to-br from-gray-900 to-black border-r border-white/10 items-center justify-center p-12">
+        <div className="max-w-xs text-center">
+            <h2 className="text-4xl font-black text-white/20 italic tracking-tighter uppercase">Transferir</h2>
+            <p className="text-gray-600 mt-4 text-sm font-medium uppercase tracking-widest italic">Seguridad en cada paso</p>
         </div>
       </div>
 
-      {/* TABS */}
-      <div className="flex border-b border-gray-700">
-        <button
-          onClick={() => setActiveTab('received')}
-          className={`flex-1 py-3 font-bold text-sm ${activeTab === 'received' ? 'text-yellow-400 border-b-2 border-yellow-400 bg-white/5' : 'text-gray-400'}`}
-        >
-          RECIBIDAS ({receivedRequests.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('sent')}
-          className={`flex-1 py-3 font-bold text-sm ${activeTab === 'sent' ? 'text-blue-400 border-b-2 border-blue-400 bg-white/5' : 'text-gray-400'}`}
-        >
-          ENVIADAS ({sentRequests.length})
-        </button>
+      {/* Columna Central (App) */}
+      <div className="w-full h-full lg:max-w-md bg-[#050b14] flex flex-col relative z-10 border-x border-white/5 shadow-2xl">
+        <div className="bg-[#1e2a47]/80 backdrop-blur-md p-4 flex justify-between items-center border-b border-white/10">
+          <button onClick={onMenuClick} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+          <h1 className="text-lg font-black uppercase tracking-widest text-white italic">Transferencias</h1>
+          <div className="w-10"></div>
+        </div>
+
+        {/* ACCIONES RÁPIDAS (Comprar/Recibir) - Visibles pero pequeñas */}
+        <div className="p-3 bg-blue-900/10 border-b border-white/5 flex gap-2">
+           <button 
+             onClick={onScanRequest} 
+             className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-black font-black py-2 rounded-lg text-[10px] flex items-center justify-center gap-2 transition-all active:scale-95 uppercase tracking-widest"
+           >
+             <span className="text-sm">📷</span> ESCANEAR
+           </button>
+           <button 
+             onClick={onInputCodeRequest}
+             className="flex-[0.8] bg-white/5 hover:bg-white/10 text-white font-black py-2 rounded-lg text-[10px] border border-white/10 transition-all active:scale-95 uppercase tracking-widest"
+           >
+             CÓDIGO
+           </button>
+        </div>
+
+        {/* PESTAÑAS DE NAVEGACIÓN */}
+        <div className="flex bg-[#0d1226] border-b border-white/5">
+           <button 
+             onClick={() => setActiveTab('items')}
+             className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'items' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500'}`}
+           >
+             📦 Artículos
+           </button>
+           <button 
+             onClick={() => setActiveTab('received')}
+             className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'received' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-gray-500'}`}
+           >
+             📥 Recibidas ({receivedRequests.length})
+           </button>
+           <button 
+             onClick={() => setActiveTab('sent')}
+             className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'sent' ? 'text-gray-300 border-b-2 border-gray-300' : 'text-gray-500'}`}
+           >
+             📤 Enviadas
+           </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+          
+          {/* CONTENIDO SEGÚN PESTAÑA */}
+          {activeTab === 'items' && (
+            <section className="space-y-4 animate-fade-in">
+              <div className="flex items-center gap-3 px-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400">
+                  <span className="text-lg">💸</span>
+                </div>
+                <h3 className="font-black text-white italic text-sm tracking-widest uppercase">Para Vender / Transferir</h3>
+              </div>
+              
+              <div className="space-y-3">
+                {myItems.length === 0 ? (
+                  <div className="p-8 text-center bg-white/5 rounded-2xl border border-white/5">
+                    <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">No tienes artículos en regla</p>
+                  </div>
+                ) : (
+                  myItems.map(item => (
+                    <div key={item.qrId} className="bg-[#111928]/95 backdrop-blur-xl p-4 rounded-2xl border border-white/10 shadow-lg group">
+                      <div className="flex justify-between items-center mb-4">
+                        <div>
+                          <h4 className="font-bold text-white text-base">{item.marca} {item.modelo}</h4>
+                          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{item.tipo}</p>
+                        </div>
+                        <div className="bg-green-500/20 text-green-400 text-[9px] font-black px-2 py-1 rounded-full uppercase">EN REGLA</div>
+                      </div>
+                      <button 
+                        onClick={() => setSelectedForShare(item)}
+                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 rounded-xl text-xs flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-blue-900/20 uppercase tracking-widest"
+                      >
+                        📲 Compartir Datos
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'received' && (
+            <section className="space-y-4 animate-fade-in">
+              <div className="flex items-center gap-3 px-2">
+                <div className="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center text-yellow-500 font-bold">
+                  <span className="text-lg">📥</span>
+                </div>
+                <h3 className="font-black text-white italic text-sm tracking-widest uppercase">Solicitudes Recibidas</h3>
+              </div>
+
+              {loading ? (
+                <div className="flex justify-center p-8"><Spinner /></div>
+              ) : receivedRequests.length === 0 ? (
+                <div className="p-8 text-center bg-white/5 rounded-2xl border border-white/5 opacity-50">
+                  <p className="text-gray-600 text-[10px] font-bold uppercase tracking-widest">Sin solicitudes por el momento</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {receivedRequests.map(req => (
+                    <div key={req.id} className="bg-gradient-to-br from-[#1e2a47] to-[#0d1226] p-5 rounded-2xl border border-blue-500/20 shadow-xl relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 p-3">
+                         <span className="bg-yellow-500 text-black text-[8px] font-black px-2 py-1 rounded-full ring-2 ring-yellow-500/20 uppercase tracking-widest">Pendiente</span>
+                      </div>
+                      
+                      <div className="mb-4">
+                        <p className="text-blue-400 text-[9px] font-black uppercase tracking-widest mb-1">Artículo a transferir</p>
+                        <h4 className="text-white font-black text-lg">{req.itemDetails.marca} {req.itemDetails.modelo}</h4>
+                        <div className="flex items-center gap-2 mt-2">
+                          <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[10px]">👤</div>
+                          <p className="text-xs text-gray-300 font-medium">{req.buyerEmail}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          onClick={() => handleApprove(req)}
+                          disabled={!!processingId}
+                          className="flex-[2] bg-green-600 hover:bg-green-500 text-black py-3 rounded-xl font-black text-[10px] transition-all active:scale-95 shadow-lg shadow-green-900/20 uppercase tracking-widest"
+                        >
+                          {processingId === req.id ? '...' : '✅ Confirmar Venta'}
+                        </button>
+                        <button
+                          onClick={() => handleReject(req.id)}
+                          disabled={!!processingId}
+                          className="flex-1 bg-red-900/30 hover:bg-red-900/50 text-red-500 py-3 rounded-xl font-black text-[10px] border border-red-900/50 transition-all uppercase tracking-widest"
+                        >
+                          Rechazar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeTab === 'sent' && (
+            <section className="space-y-4 animate-fade-in pb-12">
+               <div className="flex items-center gap-3 px-2">
+                  <div className="w-8 h-8 rounded-lg bg-gray-500/20 flex items-center justify-center text-gray-400">
+                    <span className="text-lg">📤</span>
+                  </div>
+                  <h3 className="font-black text-white italic text-sm tracking-widest uppercase opacity-50 underline decoration-blue-500/30">Mis Compras / Pedidos</h3>
+              </div>
+              
+              {sentRequests.length === 0 ? (
+                 <div className="p-4 text-center opacity-30">
+                    <p className="text-[10px] font-bold uppercase tracking-widest">No has enviado solicitudes</p>
+                 </div>
+              ) : (
+                  <div className="space-y-3">
+                     {sentRequests.map(req => (
+                        <div key={req.id} className="bg-white/5 p-4 rounded-xl border border-white/5 flex items-center justify-between group">
+                           <div>
+                              <p className="text-xs font-bold text-gray-200">{req.itemDetails.marca} {req.itemDetails.modelo}</p>
+                              <p className="text-[9px] text-gray-500 font-medium uppercase tracking-tighter mt-1">{new Date(req.createdAt).toLocaleDateString()}</p>
+                           </div>
+                           <div className="flex items-center gap-3">
+                              <span className={`text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-widest
+                                            ${req.status === TransferStatus.Pending ? 'bg-yellow-500/10 text-yellow-500' :
+                                              req.status === TransferStatus.Rejected ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'}`}>
+                                {req.status === TransferStatus.Pending ? 'Esperando' : req.status}
+                              </span>
+                              {req.status === TransferStatus.Pending && (
+                                 <button onClick={() => handleCancel(req.id)} className="w-6 h-6 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center hover:bg-red-500/20 transition-colors">×</button>
+                              )}
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+              )}
+            </section>
+          )}
+
+        </div>
       </div>
 
-      {/* LISTA */}
-      <div className="flex-grow overflow-y-auto p-4">
-        {loading ? (
-          <div className="flex justify-center mt-10"><Spinner /></div>
-        ) : activeTab === 'received' ? (
-          // LISTA DE VENDEDOR
-          receivedRequests.length === 0 ? (
-            <p className="text-center text-gray-500 mt-10">No tienes solicitudes pendientes.</p>
-          ) : (
-            <div className="space-y-4">
-              {receivedRequests.map(req => (
-                <div key={req.id} className="bg-[#1e2a47] p-4 rounded-xl border border-gray-700">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <p className="font-bold text-white text-lg">{req.itemDetails.marca} {req.itemDetails.modelo}</p>
-                      <p className="text-xs text-blue-300">{req.itemDetails.tipo}</p>
-                    </div>
-                    <span className="bg-yellow-500/20 text-yellow-400 text-xs px-2 py-1 rounded">PENDIENTE</span>
-                  </div>
-                  <p className="text-sm text-gray-300 mb-4">
-                    Comprador: <span className="text-white font-bold">{req.buyerEmail}</span>
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleApprove(req)}
-                      disabled={!!processingId}
-                      className="flex-1 bg-green-600 hover:bg-green-500 text-white py-2 rounded-lg font-bold text-sm transition-colors"
-                    >
-                      {processingId === req.id ? '...' : '✅ CONFIRMAR PAGO'}
-                    </button>
-                    <button
-                      onClick={() => handleReject(req.id)}
-                      disabled={!!processingId}
-                      className="px-4 bg-red-900/50 text-red-400 border border-red-900 rounded-lg font-bold text-sm hover:bg-red-900/80"
-                    >
-                      RECHAZAR
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
-        ) : (
-          // LISTA DE COMPRADOR
-          sentRequests.length === 0 ? (
-            <p className="text-center text-gray-500 mt-10">No has enviado solicitudes.</p>
-          ) : (
-            <div className="space-y-4">
-              {sentRequests.map(req => (
-                <div key={req.id} className="bg-[#1e2a47] p-4 rounded-xl border border-gray-700 opacity-80">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <p className="font-bold text-white">{req.itemDetails.marca} {req.itemDetails.modelo}</p>
-                      <p className="text-xs text-gray-400">Solicitado el: {new Date(req.createdAt).toLocaleDateString()}</p>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded font-bold 
-                                    ${req.status === TransferStatus.Pending ? 'bg-yellow-500/20 text-yellow-400' :
-                        req.status === TransferStatus.Rejected ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
-                      {req.status === TransferStatus.Pending ? 'ESPERANDO APROBACIÓN' : req.status}
-                    </span>
-                  </div>
-                  {req.status === TransferStatus.Pending && (
-                    <button
-                      onClick={() => handleCancel(req.id)}
-                      disabled={!!processingId}
-                      className="w-full mt-2 border border-gray-600 text-gray-400 py-2 rounded-lg text-sm hover:text-white hover:border-white transition-colors"
-                    >
-                      CANCELAR SOLICITUD
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )
-        )}
+      {/* Columna Derecha (Espacio Premium) */}
+      <div className="hidden lg:flex flex-1 h-full bg-gradient-to-bl from-gray-900 to-black border-l border-white/10 items-center justify-center p-12">
+        <div className="max-w-xs text-center">
+            <h2 className="text-4xl font-black text-white/20 italic tracking-tighter uppercase">Vender</h2>
+            <p className="text-gray-600 mt-4 text-sm font-medium uppercase tracking-widest italic">Digitalizando la confianza</p>
+        </div>
       </div>
+
+      {/* MODAL: COMPARTIR DATOS */}
+      {selectedForShare && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fade-in">
+          <div className="w-full max-w-sm bg-[#1e2a47] rounded-3xl border border-white/10 overflow-hidden shadow-2xl animate-scale-up">
+             <div className="p-6 text-center border-b border-white/5">
+                <h3 className="text-xl font-black text-white tracking-widest uppercase italic">Datos del Artículo</h3>
+                <p className="text-blue-400 text-[10px] font-bold mt-2 uppercase tracking-widest">Listo para vender</p>
+             </div>
+             
+             <div className="p-8 space-y-6">
+                <div className="text-center">
+                   <p className="text-gray-400 text-[10px] uppercase font-bold tracking-widest mb-1">CÓDIGO DE TRANSFERENCIA</p>
+                   <div className="bg-black/40 py-4 rounded-2xl border border-blue-500/30 flex items-center justify-center gap-3">
+                      <span className="text-3xl font-black text-yellow-400 tracking-widest">{selectedForShare.shortId}</span>
+                      <button 
+                        onClick={() => { navigator.clipboard.writeText(selectedForShare.shortId!); alert("Código copiado"); }}
+                        className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center active:bg-blue-500 transition-colors"
+                      >📋</button>
+                   </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                   <button 
+                      onClick={() => handleShareWhatsApp(selectedForShare)}
+                      className="w-full bg-[#25D366] hover:bg-[#128C7E] text-black font-black py-4 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-green-900/20 transition-all active:scale-95 uppercase tracking-widest text-xs"
+                   >
+                     <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-5 h-5" alt="WA" />
+                     WhatsApp
+                   </button>
+                   <button 
+                      onClick={() => setSelectedForShare(null)}
+                      className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-colors uppercase tracking-widest text-[10px]"
+                   >
+                     Cerrar
+                   </button>
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
 export default TransfersScreen;

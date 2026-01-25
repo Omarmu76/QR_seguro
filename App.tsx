@@ -107,6 +107,8 @@ const App: React.FC = () => {
           <ScanScreen
             onScanComplete={(res) => { setScannedResult(res); setActiveScreen(Screen.ScanResult); }}
             onCancel={() => setActiveScreen(Screen.Home)}
+            onInputCodeRequest={() => setActiveScreen(Screen.InputCode)}
+            onMenuClick={() => setIsMenuOpen(true)}
           />
         );
 

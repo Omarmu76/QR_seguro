@@ -100,11 +100,14 @@ const SideMenu: React.FC<SideMenuProps> = ({
             <span className={iconClass}>🗺️</span> RADAR GLOBAL
           </button>
           <button onClick={() => onNavigate(Screen.TRANSFERS)} className={menuBtnClass}>
-            <span className={iconClass}>🤝</span> TRANSFERENCIAS
+            <span className={iconClass}>💸</span> TRANSFERIR / VENDER
           </button>
+          {/* 
+          // [EN ESPERA] Opción 'Vender' ocultada según Protocolo de Unificación
           <button onClick={() => onNavigate(Screen.SELL)} className={menuBtnClass}>
             <span className={iconClass}>💰</span> VENDER ARTÍCULO
           </button>
+          */}
 
           {/* DIVISOR SUTIL */}
           <div className="h-px bg-white/5 my-1.5 mx-2"></div>
@@ -118,7 +121,7 @@ const SideMenu: React.FC<SideMenuProps> = ({
             <span className={iconClass}>⌨️</span> INGRESAR CÓDIGO
           </button>
           <button onClick={() => onNavigate(Screen.Generate)} className={menuBtnClass}>
-            <span className={iconClass}>✚</span> NUEVO ÍTEM
+            <span className={iconClass}>✚</span> NUEVO ARTÍCULO
           </button>
 
           {/* COMUNIDAD */}
