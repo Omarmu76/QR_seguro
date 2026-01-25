@@ -96,6 +96,13 @@ export interface Item {
   trackingType?: TrackingType; // Define la inteligencia del item
   linkedDeviceId?: string;     // "Huella digital" del dispositivo (para SELF_DEVICE)
 
+  // NUEVOS CAMPOS PROTOCOLO DE ALERTAS (Paso 1 y 3)
+  alertActive?: boolean;         // Indica si hay un hallazgo no visto por el dueño
+  lastSeenLocation?: { lat: number; lng: number } | null;
+  lastSeenBy?: string | null;    // ID del usuario que reportó el hallazgo
+  lastSeenAt?: number | null;    // Timestamp del hallazgo
+  isPublic?: boolean;            // Si el ítem debe ser visible en el mapa público
+  
   // Datos de Pago
   paymentMethod?: string;
   paymentAmount?: number;

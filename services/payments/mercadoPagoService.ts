@@ -35,12 +35,15 @@ export const createMercadoPagoPreference = async (item: Item) => {
     const data = await response.json();
     console.log('2. Preferencia creada con éxito:', data);
 
-    // Mercado Pago devuelve un ID de preferencia (preferenceId)
-    // Retornamos el ID para que el componente 'Wallet' lo use, 
-    // o la URL si decidimos redirigir (init_point).
+    /**
+     * Descripción del Retorno:
+     * Para cumplir con la Regla #4 (sin errores de TS), transformamos la respuesta
+     * de Mercado Pago al formato estándar { checkoutUrl: string }.
+     * - init_point: Es la URL oficial de Mercado Pago para procesar el pago.
+     */
     return {
-      preferenceId: data.id,
-      init_point: data.init_point // Por si decides redirigir
+      checkoutUrl: data.init_point, // Mapeamos init_point a checkoutUrl para consistencia global
+      preferenceId: data.id        // Mantenemos el ID por si la UI lo requiere
     };
 
   } catch (error) {

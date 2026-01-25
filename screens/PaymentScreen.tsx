@@ -14,7 +14,13 @@ interface PaymentScreenProps {
 const PaymentScreen: React.FC<PaymentScreenProps> = ({ item, user, onActivationComplete, onCancel }) => {
   const [loading, setLoading] = useState(false);
   const [currency, setCurrency] = useState<string>('ARS'); // Default ARS
-  const [rate, setRate] = useState<number>(1);
+  /**
+   * Explicación (Regla #4):
+   * Se elimina la variable 'rate' ya que, aunque se calculaba el valor de cambio,
+   * no se estaba utilizando para renderizado ni cálculos posteriores.
+   * Esto soluciona la advertencia TS6133 y permite una compilación limpia.
+   */
+  const [, setRate] = useState<number>(1);
   const [finalPrice, setFinalPrice] = useState<number>(0);
 
   // Estado para el Modal de Confirmación

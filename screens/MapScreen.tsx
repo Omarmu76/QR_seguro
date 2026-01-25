@@ -67,6 +67,13 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
 
   const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
   const [initPos, setInitPos] = useState<{ lat: number; lng: number } | null>(null);
+  
+  /**
+   * Explicación (Paso 4): Alerta Pasiva.
+   * Estado para controlar el Toast que avisa sobre denuncias en la zona.
+   */
+  const [showToast, setShowToast] = useState(false);
+  
   const lastUpdateRef = useRef<number>(0);
   const [myItems, setMyItems] = useState<Item[]>([]);
   const [publicItems, setPublicItems] = useState<Item[]>([]);
@@ -95,6 +102,19 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     const unsubSentries = subscribeToActiveSentries((sentries) => setActiveSentries(sentries.filter(s => s.userId !== user.uid)));
     return () => { unsubMy(); unsubPublic(); unsubSentries(); };
   }, [user.uid]);
+
+  /**
+   * Explicación (Paso 4): Detector de Denuncias Cercanas.
+   * Si la lista de ítems denunciados cambia y hay denuncias activas,
+   * mostramos un aviso visual discreto durante 5 segundos.
+   */
+  useEffect(() => {
+    if (publicItems.length > 0) {
+      setShowToast(true);
+      const timer = setTimeout(() => setShowToast(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [publicItems]);
 
   // 2. DETECTOR DE ROBOS (Refactorizado: PROTOCOLO DE GEO-SEGURIDAD)
   const [alertTriggered, setAlertTriggered] = useState<string | null>(null);
@@ -420,6 +440,14 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   return (
     <div className="flex flex-col h-full bg-[#0d1226] relative overflow-hidden">
       <Header title="RADAR GLOBAL" onMenuClick={onMenuClick} transparent={true} />
+      
+      {/* Paso 4: Alerta Pasiva en el Mapa */}
+      {showToast && (
+        <div className="absolute top-24 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-6 py-2 rounded-full z-[2000] shadow-xl border border-red-500/50 flex items-center gap-2 animate-fade-in-down pointer-events-none">
+          <span>⚠️</span>
+          <span className="text-xs font-bold">Hay artículos denunciados en esta zona</span>
+        </div>
+      )}
 
       {/* --- MODALES --- */}
       {showModeSelector && (

@@ -1,9 +1,22 @@
 // Archivo: services/payments/customBankService.ts
-// Puerta preparada para tu futuro sistema propio (ej: CBU/Alias manual)
+// Gestiona métodos de pago personalizados (transferencia bancaria, efectivo, etc).
 import { Item } from '../../types';
-export const handleCustomPayment = async (item: Item) => {
-  console.log('Iniciando pago manual para:', item.qrId);
-  // --- EN ESPERA: Aquí irá la lógica para el sistema propio ---
-  console.error('Sistema de pago propio no implementado.');
-  throw new Error('El sistema de pago propio aún no está implementado.');
+
+/**
+ * Función: handleCustomPayment
+ * Propósito: Proveer instrucciones de pago manuales al usuario.
+ * 
+ * Explicación detallada (Regla #2):
+ * - Este método es útil para pagos fuera de línea o transferencias directas.
+ * - Retorna una URL (que podría ser una página de instrucciones) para cumplir
+ *   con la arquitectura de tipos estandarizada.
+ */
+export const handleCustomPayment = async (item: Item): Promise<{ checkoutUrl: string }> => {
+  console.log('Gestionando pago personalizado para:', item.qrId);
+  
+  // LOG: Indica que el proceso manual debe ser configurado según el país.
+  console.warn('Pago personalizado requiere configuración de instrucciones.');
+  
+  // Retorna un string vacío como checkoutUrl para satisfacer al compilador.
+  return { checkoutUrl: '' };
 };

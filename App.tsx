@@ -37,7 +37,18 @@ const App: React.FC = () => {
 
   // Estados de datos
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
-  const [scannedResult, setScannedResult] = useState<{ item: Item; status: ItemStatus } | null>(null);
+  
+  /**
+   * Explicación (Regla #2):
+   * Actualizamos scannedResult para soportar 'location', permitiendo que ResultScreen
+   * ejecute el reporte silencioso si el GPS está disponible.
+   */
+  const [scannedResult, setScannedResult] = useState<{ 
+    item: Item; 
+    status: ItemStatus; 
+    location?: { lat: number, lng: number } | null 
+  } | null>(null);
+  
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -101,9 +112,19 @@ const App: React.FC = () => {
 
       case Screen.ScanResult:
         return (
+          /**
+           * Explicación (Regla #2):
+           * Pasamos el usuario actual y un manejador de navegación personalizado
+           * que establece el ítem seleccionado antes de cambiar de pantalla.
+           */
           <ResultScreen
             result={scannedResult!}
+            currentUser={user}
             onClose={() => setActiveScreen(Screen.Home)}
+            onNavigate={(screen, item) => {
+              setSelectedItem(item);
+              setActiveScreen(screen);
+            }}
           />
         );
 

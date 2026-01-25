@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Item, ItemStatus } from '../types';
+import { Item } from '../types';
 import { getPublicReportedItems } from '../services/itemService';
 import Spinner from '../components/Spinner';
 
@@ -8,20 +8,17 @@ interface PublicReportedListScreenProps {
 }
 
 const ItemCard: React.FC<{ item: Item; onClick: () => void; }> = ({ item, onClick }) => {
-  const isReported = item.status === ItemStatus.Denunciado;
-  const isRecovered = item.status === ItemStatus.Recuperado;
-
-  let borderColor = 'border-gray-500';
-  if (isReported) borderColor = 'border-red-500';
-  if (isRecovered) borderColor = 'border-blue-500';
-
+  /**
+   * Explicación (Regla #2):
+   * Simplificamos el card para reflejar que la lista ahora solo contiene ítems denunciados.
+   */
   return (
-    <button onClick={onClick} className={`w-full text-left p-4 rounded-lg border-l-4 ${borderColor} bg-gray-800/80 flex items-center justify-between transition-transform hover:scale-105`}>
+    <button onClick={onClick} className="w-full text-left p-4 rounded-lg border-l-4 border-red-500 bg-gray-800/80 flex items-center justify-between transition-transform hover:scale-105">
       <div>
         <p className="font-bold text-white text-lg">{item.marca} {item.modelo}</p>
         <p className="text-sm text-gray-300">{item.tipo} - ID: {item.identificador}</p>
-        <p className={`text-xs font-bold mt-1 ${isReported ? 'text-red-400' : isRecovered ? 'text-blue-400' : 'text-gray-400'}`}>
-          ESTADO: {item.status?.replace('_', ' ') || 'DESCONOCIDO'}
+        <p className="text-xs font-bold mt-1 text-red-400 uppercase">
+          ESTADO: DENUNCIADO
         </p>
       </div>
       <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -31,7 +28,6 @@ const ItemCard: React.FC<{ item: Item; onClick: () => void; }> = ({ item, onClic
   );
 };
 
-
 const PublicReportedListScreen: React.FC<PublicReportedListScreenProps> = ({ onNavigate }) => {
   const [items, setItems] = useState<Item[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,16 +36,15 @@ const PublicReportedListScreen: React.FC<PublicReportedListScreenProps> = ({ onN
   const fetchItems = useCallback(async () => {
     setIsLoading(true);
     try {
+      /**
+       * Explicación (Regla #2):
+       * Consumimos el servicio que ya filtra por DENUNCIADO.
+       * Eliminamos la lógica de ordenamiento por estado ya que es redundante.
+       */
       const reportedItems = await getPublicReportedItems();
-      // Sort items: Denunciado first, then Recuperado
-      reportedItems.sort((a, b) => {
-        if (a.status === ItemStatus.Denunciado && b.status !== ItemStatus.Denunciado) return -1;
-        if (a.status !== ItemStatus.Denunciado && b.status === ItemStatus.Denunciado) return 1;
-        return 0;
-      });
       setItems(reportedItems);
     } catch (err) {
-      setError("No se pudieron cargar los items denunciados.");
+      setError("No se pudieron cargar los ítems denunciados.");
     } finally {
       setIsLoading(false);
     }

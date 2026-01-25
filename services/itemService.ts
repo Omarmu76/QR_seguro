@@ -48,12 +48,21 @@ export const getAllUserItems = async (userId: string): Promise<Item[]> => {
     }
 };
 
+/**
+ * Función: getPublicReportedItems
+ * Propósito: Obtener la lista de artículos denunciados para exposición pública.
+ * 
+ * Explicación Detallada (Regla #2):
+ * - Filtramos la colección para que SOLO aparezcan ítems con estado 'DENUNCIADO'.
+ * - Eliminamos 'Recuperado' de esta lista para cumplir con el requerimiento de privacidad.
+ */
 export const getPublicReportedItems = async (): Promise<Item[]> => {
     try {
-        const q = query(collection(db, "Items"), where("status", "in", [ItemStatus.Denunciado, ItemStatus.Recuperado]));
+        const q = query(collection(db, "Items"), where("status", "==", ItemStatus.Denunciado));
         const querySnapshot = await getDocs(q);
         return querySnapshot.docs.map((doc) => ({ ...doc.data(), qrId: doc.id } as Item));
     } catch (error) {
+        console.error("Error fetching public reported items:", error);
         return [];
     }
 };
@@ -228,23 +237,46 @@ export const deleteItem = async (qrId: string, userId: string): Promise<void> =>
 // 4. TRANSFERENCIAS
 // ==========================================
 
-export const createTransferRequest = async (item: Item, buyer: User): Promise<TransferRequest> => {
-    if (!item.qrId || !item.ownerId) throw new Error("Datos del item inválidos.");
+/**
+ * Función: createTransferRequest
+ * Propósito: Iniciar un proceso de transferencia de propiedad de un ítem.
+ * 
+ * Explicación detallada (Regla #2):
+ * - Recibe el ítem a transferir y el usuario comprador.
+ * - Soporta un tercer parámetro 'buyerLocation' para registrar la posición del comprador
+ *   al momento de la solicitud (handshake inicial).
+ * - Verifica que no existan solicitudes pendientes para el mismo ítem.
+ */
+export const createTransferRequest = async (
+    item: Item, 
+    buyer: User, 
+    buyerLocation: { lat: number; lng: number } | null = null
+): Promise<TransferRequest> => {
+    if (!item.qrId || !item.ownerId) throw new Error("Datos del ítem inválidos para transferencia.");
 
     const transfersRef = collection(db, "Transfers");
+    
+    // Verificamos duplicados pendientes
     const q = query(transfersRef,
         where("itemId", "==", item.qrId),
         where("status", "==", TransferStatus.Pending)
     );
     const existingTransfers = await getDocs(q);
-    if (!existingTransfers.empty) throw new Error("Ya existe una solicitud pendiente.");
+    if (!existingTransfers.empty) throw new Error("Ya existe una solicitud de transferencia pendiente.");
 
+    // Construimos la solicitud con los nuevos estándares de datos
     const newTransferData: Omit<TransferRequest, 'id' | 'createdAt'> = {
         itemId: item.qrId,
-        itemDetails: { tipo: item.tipo, marca: item.marca, modelo: item.modelo, identificador: item.identificador },
+        itemDetails: { 
+            tipo: item.tipo, 
+            marca: item.marca, 
+            modelo: item.modelo, 
+            identificador: item.identificador 
+        },
         sellerId: item.ownerId,
         buyerId: buyer.uid,
-        buyerEmail: buyer.email || "Usuario",
+        buyerEmail: buyer.email || "Usuario Anónimo",
+        buyerLocation: buyerLocation || undefined, // Registramos GPS si está disponible
         status: TransferStatus.Pending,
     };
 
@@ -253,9 +285,12 @@ export const createTransferRequest = async (item: Item, buyer: User): Promise<Tr
             ...newTransferData,
             createdAt: serverTimestamp(),
         });
+        
+        // Retornamos el objeto completo incluyendo el ID generado por Firestore
         return { ...newTransferData, id: docRef.id, createdAt: Date.now() };
     } catch (error) {
-        throw new Error("No se pudo crear la solicitud.");
+        console.error("Error en createTransferRequest:", error);
+        throw new Error("No se pudo procesar la solicitud de transferencia.");
     }
 };
 
@@ -288,25 +323,40 @@ export const getSentTransfers = async (buyerId: string): Promise<TransferRequest
     }
 };
 
-export const approveTransfer = async (transferId: string, itemId: string, buyerId: string) => {
+/**
+ * Función: approveTransfer
+ * Propósito: Ejecutar la transferencia de propiedad en Firestore (Operación Atómica).
+ * 
+ * Explicación bloque por bloque:
+ * 1. Crea un lote (batch) para asegurar que todos los cambios ocurran simultáneamente.
+ * 2. Actualiza el estado de la solicitud a 'Approved'.
+ * 3. Cambia el dueño del ítem (ownerId) al ID del comprador.
+ * 4. Regenera el shortId (QR) para garantizar la privacidad del nuevo dueño.
+ * 5. Resetea los estados de seguimiento y pago para el nuevo ciclo de propiedad.
+ */
+export const approveTransfer = async (transferId: string, itemId: string, buyerId: string): Promise<void> => {
     const batch = writeBatch(db);
+    
+    // Actualización de la solicitud
     const transferRef = doc(db, "Transfers", transferId);
     batch.update(transferRef, { status: TransferStatus.Approved });
 
+    // Actualización del ítem
     const itemRef = doc(db, "Items", itemId);
-    const newShortId = await getUniqueShortId();
+    const newShortId = await getUniqueShortId(); // Nuevo ID de protección exclusivo
 
     batch.update(itemRef, {
         ownerId: buyerId,
         status: ItemStatus.EnRegla,
         shortId: newShortId,
-        paymentStatus: PaymentStatus.Pending,
+        paymentStatus: PaymentStatus.Pending, // El nuevo dueño debe activar su propia suscripción
         location: null,
         locationTimestamp: null,
         recoveryLocation: null,
         recoveryTimestamp: null,
     });
 
+    // Ejecución final del lote
     await batch.commit();
 };
 
@@ -404,5 +454,35 @@ export const linkDeviceToItem = async (userId: string, itemId: string, deviceId:
     } catch (error) {
         console.error("Error in linkDeviceToItem:", error);
         throw error;
+    }
+};
+
+/**
+ * Función: reportFinding
+ * Propósito: Registrar la ubicación de un ítem denunciado cuando es escaneado por un tercero.
+ * 
+ * Explicación Detallada (Regla #2):
+ * 1. Recibe el ID del ítem, coordenadas (lat/lng) y el ID de quien lo encontró.
+ * 2. Actualiza el documento en Firestore agregando información de "última vez visto".
+ * 3. Activa 'alertActive' para notificar proactivamente al dueño original.
+ * 4. NOTA: Esta función es silenciosa; no cambia el estado 'DENUNCIADO' del ítem.
+ */
+export const reportFinding = async (qrId: string, lat: number, lng: number, finderId: string): Promise<void> => {
+    try {
+        // Referencia al documento del ítem en la colección 'Items'
+        const itemRef = doc(db, 'Items', qrId);
+        
+        // Actualizamos solo los campos de rastreo y alerta
+        await updateDoc(itemRef, {
+            lastSeenLocation: { lat, lng }, // Coordenadas del hallazgo
+            lastSeenBy: finderId,           // ID del usuario que escaneó
+            lastSeenAt: Date.now(),         // Marca de tiempo actual
+            alertActive: true               // Disparador para la alerta del dueño
+        });
+        
+        console.log("📍 Protocolo Silencioso: Hallazgo registrado con éxito.");
+    } catch (error) {
+        console.error("Error en protocolo silencioso (reportFinding):", error);
+        // No lanzamos error para no interrumpir la experiencia del usuario que escanea
     }
 };

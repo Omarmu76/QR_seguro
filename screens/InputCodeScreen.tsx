@@ -4,7 +4,7 @@ import { Item, ItemStatus } from '../types';
 import Spinner from '../components/Spinner';
 
 interface InputCodeScreenProps {
-  onScanComplete: (result: { item: Item; status: ItemStatus }) => void;
+  onScanComplete: (result: { item: Item; status: ItemStatus; location?: { lat: number, lng: number } | null }) => void;
   onCancel: () => void;
 }
 

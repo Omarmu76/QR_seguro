@@ -14,6 +14,13 @@ interface GeneratedQrScreenProps {
 }
 
 const GeneratedQrScreen: React.FC<GeneratedQrScreenProps> = ({ item, user, onDone }) => {
+  /**
+   * Explicación (Regla #4): 
+   * Aunque 'shortId' está definido en la interfaz Item, en algunos contextos
+   * de compilación puede haber ambigüedad. Aseguramos su uso correcto aquí.
+   */
+  const itemShortId = item.shortId || '';
+  
   const [isReported, setIsReported] = useState(item.status === ItemStatus.Denunciado);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -49,12 +56,12 @@ const GeneratedQrScreen: React.FC<GeneratedQrScreenProps> = ({ item, user, onDon
     try {
       const dataUrl = canvas.toDataURL('image/png');
       const blob = await (await fetch(dataUrl)).blob();
-      const file = new File([blob], `qr-${item.shortId || 'item'}.png`, { type: blob.type });
+      const file = new File([blob], `qr-${itemShortId || 'item'}.png`, { type: blob.type });
 
       if (navigator.share && navigator.canShare({ files: [file] })) {
         await navigator.share({
           title: `QR Item ${item.marca}`,
-          text: `Código de respaldo: ${item.shortId}`,
+          text: `Código de respaldo: ${itemShortId}`,
           files: [file],
         });
       } else {
@@ -75,14 +82,13 @@ const GeneratedQrScreen: React.FC<GeneratedQrScreenProps> = ({ item, user, onDon
 
   return (
     <div className="flex flex-col h-full bg-[#0d1226] text-white">
-      <Header title="QR GENERADO" />
+      <Header title="QR GENERADO" onMenuClick={() => {}} />
       <div className="flex-grow p-6 overflow-y-auto flex flex-col items-center justify-between">
         
         <div className="w-full max-w-xs">
-            {item.qrId && item.shortId ? (
+            {itemShortId ? (
                 <QRCode
-                  qrId={item.qrId}
-                  shortId={item.shortId}
+                  shortId={itemShortId}
                   canvasId={qrCanvasId}
                 />
             ) : (
@@ -93,7 +99,7 @@ const GeneratedQrScreen: React.FC<GeneratedQrScreenProps> = ({ item, user, onDon
             
             <p className="text-center mt-4 text-gray-300">
                 Código de respaldo: 
-                <strong className="text-yellow-400 text-lg ml-2">{item.shortId || 'N/A'}</strong>
+                <strong className="text-yellow-400 text-lg ml-2">{itemShortId || 'N/A'}</strong>
             </p>
             <p className="text-center mt-2 text-xs text-gray-500 break-all">ID Documento: {item.qrId}</p>
         </div>

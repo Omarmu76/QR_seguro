@@ -1,0 +1,23 @@
+# Agent Rules for QR Seguro
+
+Everything the agent or editor responds in the chat must be in Spanish (except code).
+All code generated must have an initial description of what it does, block by block, and line by line.
+Generate a plan and wait for approval before significant work.
+Generate a report in the `INFORMES` folder, numbered and dated (e.g., `042_REPORT_TITLE_DD-MM-YY.md`).
+Check for errors in terminal, problems, typescript, and browser console before finishing.
+Do not push to GitHub unless specifically requested.
+
+## Idioma
+- Chat: Español
+- Explicaciones técnicas: Español
+- Documentación: Español
+- Código: Inglés
+
+## Estilo de Código
+- Siempre incluir una descripción detallada antes de cada bloque de código.
+- Comentar cada línea importante del código generado.
+- Validar tipos de datos en cada paso.
+
+## Calidad
+- Ejecutar `npm run build` o similar para verificar errores de compilación.
+- Revisar la pestaña de "Problems" en el editor.

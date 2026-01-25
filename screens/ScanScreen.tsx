@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { getItemByShortId, updateItemStatus } from '../services/itemService';
+import { getItemByShortId } from '../services/itemService';
 import { Item, ItemStatus } from '../types';
 import Spinner from '../components/Spinner';
 
 interface ScanScreenProps {
-  onScanComplete: (result: { item: Item; status: ItemStatus }) => void;
+  onScanComplete: (result: { item: Item; status: ItemStatus; location?: { lat: number, lng: number } | null }) => void;
   onCancel: () => void;
 }
 
@@ -91,34 +91,28 @@ const ScanScreen: React.FC<ScanScreenProps> = ({ onScanComplete, onCancel }) => 
               const result = await getItemByShortId(shortId.trim());
 
               if (result) {
-                let reportMessage = null;
+                let location: { lat: number, lng: number } | null = null;
 
-                // Si está robado, reportamos ubicación
+                // Capturamos ubicación si el ítem está denunciado para el reporte silencioso
                 if (result.status === ItemStatus.Denunciado) {
-                  setStatusMsg('⚠️ REPORTADO ROBADO ⚠️\nRegistrando ubicación...');
+                  setStatusMsg('Verificando seguridad...');
                   try {
-                    const location = await getCollaborativeLocation();
-                    await updateItemStatus(result.item.qrId!, "public", ItemStatus.Denunciado, location);
-                    reportMessage = "¡GRACIAS! 🛡️\n\nEste artículo fue reportado como robado.\nTu escaneo ha enviado la ubicación actual al dueño.";
+                    location = await getCollaborativeLocation();
                   } catch (gpsError) {
-                    console.warn("GPS error:", gpsError);
+                    console.warn("GPS no disponible para reporte silencioso.");
                   }
                 }
 
-                // >>> PUNTO CRÍTICO DE ESTABILIDAD <<<
                 if (isMountedRef.current) {
-                  // 1. PRIMERO MATAMOS LA CÁMARA (Para evitar crash con el Alert)
                   await safeStopScanner();
-
-                  // 2. AHORA SÍ MOSTRAMOS LA ALERTA (Si corresponde)
-                  if (reportMessage) {
-                    alert(reportMessage);
-                  }
-
-                  // 3. FINALMENTE NAVEGAMOS
-                  onScanComplete(result);
+                  
+                  /**
+                   * Explicación (Regla #2):
+                   * Pasamos la ubicación capturada para que ResultScreen realice el
+                   * reporte silencioso sin interrumpir el flujo con alertas ruidosas.
+                   */
+                  onScanComplete({ ...result, location });
                 }
-
               } else {
                 throw new Error("Código no registrado.");
               }

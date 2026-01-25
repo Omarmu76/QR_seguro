@@ -30,7 +30,11 @@ const getCurrentLocation = (): Promise<{ lat: number, lng: number }> => {
           lng: position.coords.longitude,
         });
       },
-      (err) => {
+      (_err) => {
+        /**
+         * Explicación (Regla #4):
+         * Se usa '_err' para cumplir con la regla de variables no utilizadas.
+         */
         reject(new Error("No se pudo obtener la ubicación."));
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -87,9 +91,14 @@ const PublicItemDetailScreen: React.FC<PublicItemDetailScreenProps> = ({ itemId,
       let location = null;
       try {
         location = await getCurrentLocation();
-      } catch (err) {
-          // No es crítico si falla el GPS, pero avisamos
-          console.warn("No se pudo obtener ubicación de recuperación.");
+      } catch (_err) {
+        /**
+         * Explicación (Regla #4): 
+         * Prefijamos con '_' para indicar que el error no se usa pero se captura,
+         * evitando así la advertencia TS6133.
+         */
+        // No es crítico si falla el GPS, pero avisamos
+        console.warn("No se pudo obtener ubicación de recuperación.");
       }
       
       try {

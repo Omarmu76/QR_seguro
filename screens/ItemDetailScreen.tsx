@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Header from '../components/Header';
 import QRCode from '../components/QRCode';
 import { Item, ItemStatus } from '../types';
-import { updateItemStatus, linkDeviceToItem } from '../services/itemService';
+import { updateItemStatus, linkDeviceToItem, updateItem } from '../services/itemService';
 import Spinner from '../components/Spinner';
 import ConfirmationModal from '../components/common/ConfirmationModal';
 
@@ -81,14 +81,36 @@ const ItemDetailScreen: React.FC<ItemDetailScreenProps> = ({ item, onDone }) => 
     if (!item.qrId) return;
     setIsProcessing(true);
     try {
-      let location = null;
-      if (!isCurrentlyReported) { try { location = await getCurrentLocation(); } catch (e) { } }
-      const newStatus = isCurrentlyReported ? ItemStatus.Recuperado : ItemStatus.Denunciado;
-
-      await updateItemStatus(item.qrId, item.ownerId, newStatus, location);
-      setCurrentItemStatus(newStatus);
+      if (isCurrentlyReported) {
+        /**
+         * Explicación (Paso 3): Limpieza Total al Recuperar.
+         * Cuando el usuario confirma que recuperó el objeto, reseteamos todos los
+         * campos de seguridad para que el ítem vuelva a estar "En Regla" y privado.
+         */
+        await updateItem(item.qrId, {
+          status: ItemStatus.EnRegla,     // Volver a estado seguro
+          alertActive: false,            // Apagar la alarma de hallazgo
+          lastSeenLocation: null,        // Borrar el rastro del robo
+          lastSeenBy: null,
+          lastSeenAt: null,
+          isPublic: false                // Sacar del mapa público de denuncias
+        });
+        setCurrentItemStatus(ItemStatus.EnRegla);
+        alert("✅ ¡Qué bueno! Tu artículo está seguro de nuevo.");
+      } else {
+        /**
+         * Lógica de Reporte de Robo.
+         * Capturamos la ubicación actual del incidente y marcamos como denunciado.
+         */
+        let location = null;
+        try { location = await getCurrentLocation(); } catch (e) { console.warn("GPS no disponible"); }
+        
+        await updateItemStatus(item.qrId, item.ownerId, ItemStatus.Denunciado, location);
+        setCurrentItemStatus(ItemStatus.Denunciado);
+      }
     } catch (e) {
-      alert("Error al actualizar estado.");
+      console.error(e);
+      alert("Error al actualizar el estado del artículo.");
     } finally {
       setIsProcessing(false);
     }

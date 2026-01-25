@@ -23,7 +23,12 @@ const EditItemScreen: React.FC<EditItemScreenProps> = ({ item, user, onCancel, o
     modelo: item.modelo,
     tipo: item.tipo,
     color: item.color || '',
-    description: item.description || item.descripcion || '',
+    /**
+     * Explicación (Regla #4): 
+     * Se elimina 'item.descripcion' ya que el tipo 'Item' solo define 'description'.
+     * Esto corrige el error TS2551 durante la compilación.
+     */
+    description: item.description || '',
     reward: item.reward ? item.reward.toString() : '',
   });
 
