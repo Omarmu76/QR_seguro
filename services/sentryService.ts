@@ -9,9 +9,10 @@ export interface SentryNode {
     userId: string;
     lat: number;
     lng: number;
-    status: 'ARMED' | 'ALARM' | 'RESCUE'; // Agregamos 'RESCUE' (Modo Persecución)
+    status: 'ARMED' | 'ALARM' | 'RESCUE' | 'RESOLVED'; // Agregamos 'RESOLVED'
     timestamp: number;
     groupCode?: string; // Código de Vigila2 (si es null, es individual)
+    dynamicItems?: any[]; // Lista de items GPS del usuario (Auto, Moto, etc)
 }
 
 // Estructura del "Círculo Fijo"
@@ -29,8 +30,9 @@ export const updateMySentryStatus = async (
     userId: string,
     lat: number,
     lng: number,
-    status: 'ARMED' | 'ALARM' | 'RESCUE',
-    groupCode?: string
+    status: 'ARMED' | 'ALARM' | 'RESCUE' | 'RESOLVED',
+    groupCode?: string,
+    dynamicItems: any[] = []
 ): Promise<void> => {
     try {
         const sentryRef = doc(db, "sentries", userId);
@@ -40,6 +42,7 @@ export const updateMySentryStatus = async (
             lng,
             status,
             groupCode: groupCode || null, // Guardamos el código si existe
+            dynamicItems,
             timestamp: Date.now()
         }, { merge: true });
     } catch (error) {

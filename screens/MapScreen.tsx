@@ -24,15 +24,23 @@ const greenIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/point
 const redIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
 const purpleIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
 
+// --- PALETA DE COLORES VIGILA2 ---
+const GROUP_COLORS = [
+    '#06B6D4', // Cyan (Usuario 2)
+    '#F97316', // Naranja (Usuario 3)
+    '#D946EF', // Magenta (Usuario 4)
+    '#8B5CF6', // Violeta
+    '#EAB308', // Amarillo
+    '#EC4899', // Rosa
+    '#14B8A6', // Turquesa
+    '#6366F1', // Índigo
+    '#84CC16', // Lima
+    '#F43F5E'  // Coral
+];
+
 // --- MARCADORES PERSONALIZADOS ---
 
 // --- ICONOS VIGÍA ---
-const shieldBlueIcon = new L.DivIcon({ className: 'custom-div-icon', html: `<div style="font-size: 24px;">🛡️</div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
-const shieldGoldIcon = new L.DivIcon({ className: 'custom-div-icon', html: `<div style="font-size: 28px; filter: drop-shadow(0 0 5px orange);">⚜️</div>`, iconSize: [35, 35], iconAnchor: [17, 17] });
-const shieldRedIcon = new L.DivIcon({ className: 'custom-div-icon', html: `<div style="font-size: 24px;" class="animate-pulse">🚨</div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
-const shieldRescueIcon = new L.DivIcon({ className: 'custom-div-icon', html: `<div style="font-size: 24px;">🚑</div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
-
-// --- UI HELPERS ---
 const QrIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4h2v-4zM6 8V4h2M4 8H2M6 20h2m-2-4H2m6-8h4m2 0h4" /></svg>);
 
 const MapUpdater = ({ center }: { center: { lat: number, lng: number } | null }) => {
@@ -95,6 +103,22 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   const [activeSentries, setActiveSentries] = useState<SentryNode[]>([]);
   const alarmAudio = useRef(new Audio('https://actions.google.com/sounds/v1/alarms/spaceship_alarm.ogg'));
 
+  // --- LÓGICA DE COLORES DE GRUPO ---
+  const groupMembership = useMemo(() => {
+    if (!vigiaMode || vigiaType !== 'GROUP') return [];
+    // Incluimos a todos los miembros del grupo incluyendo al usuario actual
+    const members = [
+      ...activeSentries.filter(s => s.groupCode === vigiaPin),
+      { userId: user.uid }
+    ];
+    return members.sort((a, b) => a.userId.localeCompare(b.userId));
+  }, [activeSentries, vigiaMode, vigiaType, vigiaPin, user.uid]);
+
+  const myGroupColor = useMemo(() => {
+    const idx = groupMembership.findIndex(m => m.userId === user.uid);
+    return idx !== -1 ? GROUP_COLORS[idx % GROUP_COLORS.length] : null;
+  }, [groupMembership, user.uid]);
+
   // 1. SUBSCRIPCIONES
   useEffect(() => {
     const unsubMy = subscribeToUserItems(user.uid, (items) => { setMyItems(items); myItemsRef.current = items; });
@@ -155,21 +179,47 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
           setUserPos(newPos);
           if (!initPos) setInitPos(newPos);
 
+          // 1. Obtener items "imantados" para compartir
+          const myDynamicItems = myItemsRef.current
+            .filter(item => item.trackingType === 'SELF_DEVICE' && item.linkedDeviceId === currentDeviceId && isValidCoords(item.location))
+            .map(item => ({
+              id: item.qrId,
+              lat: item.location!.lat,
+              lng: item.location!.lng,
+              tipo: item.tipo,
+              marca: item.marca
+            }));
+
           // Lógica Vigía
           if ((vigiaMode || silentHuntActive) && vigiaAnchor) {
+            
+            // NUEVO: LÓGICA DE RESOLUCIÓN AUTOMÁTICA (EFECTO DOMINÓ)
+            const isGroupResolved = activeSentries.some(s => s.groupCode === vigiaPin && s.status === 'RESOLVED');
+            if (isGroupResolved && vigiaMode) {
+              alarmAudio.current.pause();
+              alert("✅ ¡EMERGENCIA RESUELTA! El grupo se ha disuelto.");
+              setVigiaMode(false);
+              setSilentHuntActive(false);
+              setVigiaAnchor(null);
+              setVigiaType(null);
+              setFailedAttempts(0);
+              removeMySentryStatus(user.uid);
+              return;
+            }
+
             if (mySentryStatus !== 'RESCUE') {
               const dist = getDistance(vigiaAnchor.lat, vigiaAnchor.lng, newPos.lat, newPos.lng);
               if (dist > 30) {
                 if (mySentryStatus !== 'ALARM') {
                   setMySentryStatus('ALARM');
-                  updateMySentryStatus(user.uid, newPos.lat, newPos.lng, 'ALARM', vigiaType === 'GROUP' ? vigiaPin : undefined);
+                  updateMySentryStatus(user.uid, newPos.lat, newPos.lng, 'ALARM', vigiaType === 'GROUP' ? vigiaPin : undefined, myDynamicItems);
                 }
               } else {
                 if (mySentryStatus === 'ALARM') setMySentryStatus('ARMED');
-                updateMySentryStatus(user.uid, newPos.lat, newPos.lng, mySentryStatus, vigiaType === 'GROUP' ? vigiaPin : undefined);
+                updateMySentryStatus(user.uid, newPos.lat, newPos.lng, mySentryStatus, vigiaType === 'GROUP' ? vigiaPin : undefined, myDynamicItems);
               }
             } else {
-              updateMySentryStatus(user.uid, newPos.lat, newPos.lng, 'RESCUE', vigiaType === 'GROUP' ? vigiaPin : undefined);
+              updateMySentryStatus(user.uid, newPos.lat, newPos.lng, 'RESCUE', vigiaType === 'GROUP' ? vigiaPin : undefined, myDynamicItems);
             }
 
             let triggerAlarm = false;
@@ -257,7 +307,18 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     }
     setVigiaPin(pinInput); setVigiaAnchor(anchorToUse); setVigiaMode(true); setSilentHuntActive(false);
     setFailedAttempts(0); setMySentryStatus('ARMED');
-    updateMySentryStatus(user.uid, userPos!.lat, userPos!.lng, 'ARMED', vigiaType === 'GROUP' ? pinInput : undefined);
+    
+    const myDynamicItems = myItemsRef.current
+      .filter(item => item.trackingType === 'SELF_DEVICE' && item.linkedDeviceId === currentDeviceId && isValidCoords(item.location))
+      .map(item => ({
+        id: item.qrId,
+        lat: item.location!.lat,
+        lng: item.location!.lng,
+        tipo: item.tipo,
+        marca: item.marca
+      }));
+
+    updateMySentryStatus(user.uid, userPos!.lat, userPos!.lng, 'ARMED', vigiaType === 'GROUP' ? pinInput : undefined, myDynamicItems);
     setShowPinModal(null);
   };
 
@@ -277,7 +338,16 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
 
   const activateRescueMode = () => {
     setMySentryStatus('RESCUE');
-    updateMySentryStatus(user.uid, userPos!.lat, userPos!.lng, 'RESCUE', vigiaType === 'GROUP' ? vigiaPin : undefined);
+    const myDynamicItems = myItemsRef.current
+      .filter(item => item.trackingType === 'SELF_DEVICE' && item.linkedDeviceId === currentDeviceId && isValidCoords(item.location))
+      .map(item => ({
+        id: item.qrId,
+        lat: item.location!.lat,
+        lng: item.location!.lng,
+        tipo: item.tipo,
+        marca: item.marca
+      }));
+    updateMySentryStatus(user.uid, userPos!.lat, userPos!.lng, 'RESCUE', vigiaType === 'GROUP' ? vigiaPin : undefined, myDynamicItems);
     alarmAudio.current.pause();
   };
 
@@ -397,6 +467,30 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
           iconToUse = greenIcon;
         }
 
+        // --- REGLA VIGILA2: Color de Grupo para Imantados ---
+        const isImantado = item.trackingType === 'SELF_DEVICE';
+        if (myGroupColor && isImantado && item.ownerId === user.uid && !isDenunciado) {
+           // Si estoy en VIGILA2, mis items GPS usan mi color de grupo
+           return (
+            <Marker key={`item-${item.qrId}`} position={[position.lat, position.lng]} icon={new L.DivIcon({
+                className: 'my-group-item-pin',
+                html: `<div style="background-color: ${myGroupColor}; width: 14px; height: 14px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 5px ${myGroupColor};"></div>`,
+                iconSize: [14, 14],
+                iconAnchor: [7, 7]
+            })}>
+               <Popup className="classic-popup" closeButton={false}>
+                  <div className={`flex flex-col items-center min-w-[150px] p-3 text-center rounded-lg border-2 shadow-xl bg-white border-blue-600`}>
+                    <div className="px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-2 text-white shadow-sm bg-blue-600">
+                      MI GPS ({item.tipo})
+                    </div>
+                    <h3 className="text-gray-900 font-extrabold text-sm m-0 leading-tight">{item.marca}</h3>
+                    <p className="text-gray-500 font-bold text-xs uppercase mb-2">{item.modelo}</p>
+                  </div>
+               </Popup>
+            </Marker>
+           );
+        }
+
         // REGLA FUNDAMENTAL: ELIMINADO EL DIVICON CIRCULAR PARA ÍTEMS.
         // Solo se usa el icono PNG asignado anteriormente.
 
@@ -482,18 +576,63 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
         <MapContainer center={center} zoom={16} style={{ height: '100%', width: '100%' }} zoomControl={false}>
           <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           <MapUpdater center={userPos} />
-          {isValidCoords(userPos) && <Marker key="user-pos" position={userPos} icon={new L.DivIcon({ className: 'user-loc', html: `<div style="width: 20px; height: 20px; background-color: #4285F4; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>`, iconSize: [20, 20], iconAnchor: [10, 10] })} />}
+          {isValidCoords(userPos) && <Marker key="user-pos" position={userPos} icon={new L.DivIcon({ className: 'user-loc', html: `<div style="width: 20px; height: 20px; background-color: ${myGroupColor || '#4285F4'}; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px ${myGroupColor || 'rgba(0,0,0,0.5)'};"></div>`, iconSize: [20, 20], iconAnchor: [10, 10] })} />}
           {vigiaMode && isValidCoords(vigiaAnchor) && <Circle key="vigia-anchor" center={vigiaAnchor} radius={30} pathOptions={{ color: mySentryStatus === 'ALARM' ? 'red' : (vigiaType === 'GROUP' ? 'gold' : '#0066ff'), fillColor: mySentryStatus === 'ALARM' ? 'red' : (vigiaType === 'GROUP' ? 'gold' : '#0066ff'), fillOpacity: 0.15 }} />}
 
           <MarkerClusterGroup chunkedLoading key={`cluster-${filterMode}`}>
-            {visibleSentries.map(sentry => {
-              if (!isValidCoords({ lat: sentry.lat, lng: sentry.lng })) return null;
-              return (
-                <Marker key={`sentry-${sentry.userId}`} position={{ lat: sentry.lat, lng: sentry.lng }} icon={sentry.status === 'RESCUE' ? shieldRescueIcon : (sentry.status === 'ALARM' ? shieldRedIcon : (vigiaType === 'GROUP' ? shieldGoldIcon : shieldBlueIcon))}>
-                  {sentry.status === 'ALARM' && <Popup autoClose={false} closeButton={false} className="alarm-popup"><div className="text-red-600 font-black">¡AYUDA!</div></Popup>}
-                </Marker>
-              );
-            })}
+            {visibleSentries
+              .sort((a, b) => a.userId.localeCompare(b.userId)) // Orden determinista
+              .map((sentry, index) => {
+                if (!isValidCoords({ lat: sentry.lat, lng: sentry.lng })) return null;
+                
+                // Asignación de color cíclica
+                const memberColor = GROUP_COLORS[index % GROUP_COLORS.length];
+
+                return (
+                  <React.Fragment key={`sentry-group-${sentry.userId}`}>
+                    {/* PIN DEL MIEMBRO */}
+                    <Marker 
+                      position={{ lat: sentry.lat, lng: sentry.lng }} 
+                      icon={new L.DivIcon({
+                        className: 'custom-pin',
+                        html: `<div style="background-color: ${memberColor}; width: 18px; height: 18px; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 8px ${memberColor}; position: relative;">
+                                ${sentry.status === 'ALARM' ? '<div style="position: absolute; top: -10px; right: -10px; font-size: 16px;">🚨</div>' : (sentry.status === 'RESCUE' ? '<div style="position: absolute; top: -10px; right: -10px; font-size: 16px;">🚑</div>' : '')}
+                               </div>`,
+                        iconSize: [18, 18],
+                        iconAnchor: [9, 9]
+                      })}
+                    >
+                      <Popup autoClose={false} closeButton={false}>
+                        <div className="text-center p-2">
+                          <span className="font-bold text-xs" style={{ color: memberColor }}>MIEMBRO GRUPO</span>
+                          {sentry.status === 'ALARM' && <div className="text-red-600 font-black animate-pulse">¡EN PELIGRO!</div>}
+                        </div>
+                      </Popup>
+                    </Marker>
+
+                    {/* ITEMS DINÁMICOS DEL MIEMBRO (Auto, Moto, etc) */}
+                    {sentry.dynamicItems?.map((gItem: any) => (
+                      <Marker 
+                        key={`group-item-${gItem.id}`}
+                        position={[gItem.lat, gItem.lng]}
+                        icon={new L.DivIcon({
+                          className: 'group-item-pin',
+                          html: `<div style="background-color: ${memberColor}; width: 12px; height: 12px; border: 2px solid white; border-radius: 50%; opacity: 0.9; box-shadow: 0 0 5px ${memberColor};"></div>`,
+                          iconSize: [12, 12],
+                          iconAnchor: [6, 6]
+                        })}
+                      >
+                        <Popup>
+                          <div className="text-center">
+                            <p className="font-bold text-[10px] m-0" style={{ color: memberColor }}>{gItem.tipo}</p>
+                            <p className="text-[10px] m-0">{gItem.marca}</p>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
             {markerElements}
           </MarkerClusterGroup>
           {visualLines}
@@ -501,8 +640,34 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
 
         {/* --- BOTONES FLOTANTES --- */}
         {vigiaMode && (mySentryStatus === 'ALARM' || activeSentries.some(s => s.status === 'ALARM' && (s.groupCode === vigiaPin || !s.groupCode))) && mySentryStatus !== 'RESCUE' && (
-          <div className="absolute top-32 left-0 right-0 z-[1500] flex justify-center animate-bounce">
+          <div className="absolute top-32 left-0 right-0 z-[1500] flex flex-col items-center gap-3 animate-fade-in">
             <button onClick={activateRescueMode} className="bg-red-600 border-4 border-red-400 text-white px-8 py-4 rounded-full font-black text-xl shadow-[0_0_30px_rgba(255,0,0,0.6)] flex items-center gap-2 hover:scale-105 transition-transform">🚑 IR AL RESCATE</button>
+            
+            {/* BOTÓN RESOLUCIÓN (LO TENGO) */}
+            {vigiaType === 'GROUP' && (
+              <button 
+                onClick={() => {
+                  const myDynamicItems = myItemsRef.current
+                    .filter(item => item.trackingType === 'SELF_DEVICE' && item.linkedDeviceId === currentDeviceId && isValidCoords(item.location))
+                    .map(item => ({
+                      id: item.qrId,
+                      lat: item.location!.lat,
+                      lng: item.location!.lng,
+                      tipo: item.tipo,
+                      marca: item.marca
+                    }));
+                  updateMySentryStatus(user.uid, userPos!.lat, userPos!.lng, 'RESOLVED', vigiaPin, myDynamicItems);
+                  
+                  alarmAudio.current.pause();
+                  setVigiaMode(false);
+                  removeMySentryStatus(user.uid);
+                  alert("✅ Has resuelto la alerta. El grupo se cerrará.");
+                }}
+                className="bg-green-600 border-4 border-green-400 text-white px-6 py-2 rounded-full font-black text-sm shadow-xl hover:scale-105 transition-transform"
+              >
+                ✅ ¡LO TENGO! (Desactivar)
+              </button>
+            )}
           </div>
         )}
 
