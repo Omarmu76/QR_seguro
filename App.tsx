@@ -24,6 +24,7 @@ import SellScreen from './screens/SellScreen';
 import TransfersScreen from './screens/TransfersScreen';
 import RequestTransferScreen from './screens/RequestTransferScreen';
 import AdminPaymentsScreen from './screens/AdminPaymentsScreen';
+import PaymentScreen from './screens/PaymentScreen';
 import SideMenu from './components/SideMenu';
 import BottomNavBar from './components/BottomNavBar';
 import Spinner from './components/Spinner';
@@ -229,6 +230,16 @@ const App: React.FC = () => {
 
       case Screen.ADMIN_PAYMENTS:
         return <AdminPaymentsScreen onMenuClick={() => setIsMenuOpen(true)} />;
+
+      case Screen.PAYMENT_MODAL:
+        return (
+          <PaymentScreen 
+            item={selectedItem!} 
+            user={user!} 
+            onActivationComplete={() => setActiveScreen(Screen.MyItems)} 
+            onCancel={() => setActiveScreen(Screen.MyItems)} 
+          />
+        );
 
       default:
         return <HomeScreen onScanRequest={() => setActiveScreen(Screen.Scan)} onInputCodeRequest={() => setActiveScreen(Screen.InputCode)} onNavigate={setActiveScreen} onPublicNavigate={(_: string) => setActiveScreen(Screen.PUBLIC_REPORTED)} onMenuClick={() => setIsMenuOpen(true)} />;

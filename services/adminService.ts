@@ -2,7 +2,7 @@ import {
     collection, addDoc, updateDoc, doc, getDocs, query, where, serverTimestamp, orderBy
 } from "firebase/firestore";
 import { db } from "../firebaseConfig";
-import { PaymentStatus, PaymentNotification, Item } from "../types";
+import { PaymentStatus, PaymentNotification, Item, ItemStatus } from "../types";
 
 // --- USUARIO: Notifica que pagó ---
 export const notifyPayment = async (item: any, user: any, amount: number, method: string, currency: string) => {
@@ -77,6 +77,7 @@ export const approvePayment = async (notificationId: string | null, itemId: stri
         const itemRef = doc(db, "Items", itemId);
         await updateDoc(itemRef, {
             paymentStatus: PaymentStatus.Paid,
+            status: ItemStatus.EnRegla, // <--- REPARACIÓN: Activa el ítem inmediatamente
             lastPaymentDate: serverTimestamp(),
             paymentTransactionId: notificationId ? `ADMIN-REF-${notificationId}` : `ADMIN-MANUAL-${Date.now()}`
         });
