@@ -237,61 +237,123 @@ export const deleteItem = async (qrId: string, userId: string): Promise<void> =>
 // 4. TRANSFERENCIAS
 // ==========================================
 
+// EN services/itemService.ts
+
+// Tipo para uso interno en suscripciones (basado en TransferRequest)
+export interface Transfer extends TransferRequest {
+    fromUserId?: string;
+    toUserId?: string;
+}
+
+export const requestTransfer = async (item: Item, requesterId: string, location: { lat: number, lng: number } | null = null) => {
+  // 1. DETECCIÓN INTELIGENTE DEL DUEÑO
+  // Intentamos obtener el ID del dueño de varias propiedades posibles
+  const ownerId = item.ownerId || (item as any).userId;
+
+  // 2. VALIDACIÓN DE SEGURIDAD
+  if (!ownerId) {
+     console.error("⛔ Error Crítico: Intentando transferir un ítem sin dueño identificado.");
+     throw new Error("Error de seguridad: No se puede identificar al vendedor.");
+  }
+
+  try {
+    // 3. CREACIÓN DE LA SOLICITUD
+    const transferData = {
+      itemId: item.qrId || (item as any).id, // Prioridad al QR ID
+      itemDetails: { 
+          tipo: item.tipo, 
+          marca: item.marca, 
+          modelo: item.modelo, 
+          identificador: item.identificador 
+      },
+      sellerId: ownerId,      // Compatible con lógica actual
+      buyerId: requesterId,   // Compatible con lógica actual
+      fromUserId: ownerId,    // <--- NUEVO CAMPO SOLICITADO
+      toUserId: requesterId,  // <--- NUEVO CAMPO SOLICITADO
+      buyerEmail: "Usuario por Transferencia", // Podría mejorarse obteniendo el email del requester
+      buyerLocation: location || undefined,
+      status: TransferStatus.Pending,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+
+    await addDoc(collection(db, 'Transfers'), transferData);
+    console.log(`✅ Solicitud enviada de ${requesterId} para el dueño ${ownerId}`);
+  } catch (error) {
+    console.error("Error al crear transferencia:", error);
+    throw error;
+  }
+};
+
 /**
  * Función: createTransferRequest
- * Propósito: Iniciar un proceso de transferencia de propiedad de un ítem.
- * 
- * Explicación detallada (Regla #2):
- * - Recibe el ítem a transferir y el usuario comprador.
- * - Soporta un tercer parámetro 'buyerLocation' para registrar la posición del comprador
- *   al momento de la solicitud (handshake inicial).
- * - Verifica que no existan solicitudes pendientes para el mismo ítem.
+ * Propósito: (LEGACY COMPATIBILITY) Envolver requestTransfer para no romper componentes existentes.
  */
 export const createTransferRequest = async (
     item: Item, 
     buyer: User, 
     buyerLocation: { lat: number; lng: number } | null = null
-): Promise<TransferRequest> => {
-    if (!item.qrId || !item.ownerId) throw new Error("Datos del ítem inválidos para transferencia.");
+): Promise<void> => {
+    return requestTransfer(item, buyer.uid, buyerLocation);
+};
 
-    const transfersRef = collection(db, "Transfers");
-    
-    // Verificamos duplicados pendientes
-    const q = query(transfersRef,
-        where("itemId", "==", item.qrId),
-        where("status", "==", TransferStatus.Pending)
-    );
-    const existingTransfers = await getDocs(q);
-    if (!existingTransfers.empty) throw new Error("Ya existe una solicitud de transferencia pendiente.");
+// Escuchar lo que ME PIDEN (Yo Vendo)
+export const subscribeToIncomingTransfers = (userId: string, callback: (t: Transfer[]) => void, onError?: (err: any) => void) => {
+  // Para evitar errores de tipos con 'or' en versiones inconsistentes, usamos dos listeners fusionados
+  const q1 = query(collection(db, 'Transfers'), where('fromUserId', '==', userId), where('status', '==', TransferStatus.Pending));
+  const q2 = query(collection(db, 'Transfers'), where('sellerId', '==', userId), where('status', '==', TransferStatus.Pending));
 
-    // Construimos la solicitud con los nuevos estándares de datos
-    const newTransferData: Omit<TransferRequest, 'id' | 'createdAt'> = {
-        itemId: item.qrId,
-        itemDetails: { 
-            tipo: item.tipo, 
-            marca: item.marca, 
-            modelo: item.modelo, 
-            identificador: item.identificador 
-        },
-        sellerId: item.ownerId,
-        buyerId: buyer.uid,
-        buyerEmail: buyer.email || "Usuario Anónimo",
-        buyerLocation: buyerLocation || undefined, // Registramos GPS si está disponible
-        status: TransferStatus.Pending,
-    };
+  let data1: Transfer[] = [];
+  let data2: Transfer[] = [];
 
-    try {
-        const docRef = await addDoc(collection(db, "Transfers"), {
-            ...newTransferData,
-            createdAt: serverTimestamp(),
-        });
-        
-        // Retornamos el objeto completo incluyendo el ID generado por Firestore
-        return { ...newTransferData, id: docRef.id, createdAt: Date.now() };
-    } catch (error) {
-        console.error("Error en createTransferRequest:", error);
-        throw new Error("No se pudo procesar la solicitud de transferencia.");
-    }
+  const update = () => {
+    const combined = [...data1];
+    data2.forEach(item => {
+      if (!combined.find(c => c.id === item.id)) combined.push(item);
+    });
+    callback(combined.sort((a, b) => b.createdAt - a.createdAt));
+  };
+
+  const unsub1 = onSnapshot(q1, (snap) => {
+    data1 = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: (doc.data().createdAt as Timestamp)?.toMillis() || Date.now() } as Transfer));
+    update();
+  }, (err) => { if (onError) onError(err); });
+
+  const unsub2 = onSnapshot(q2, (snap) => {
+    data2 = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: (doc.data().createdAt as Timestamp)?.toMillis() || Date.now() } as Transfer));
+    update();
+  }, (err) => { if (onError) onError(err); });
+
+  return () => { unsub1(); unsub2(); };
+};
+
+// Escuchar lo que YO PEDÍ (Yo Compro)
+export const subscribeToOutgoingTransfers = (userId: string, callback: (t: Transfer[]) => void, onError?: (err: any) => void) => {
+  const q1 = query(collection(db, 'Transfers'), where('toUserId', '==', userId));
+  const q2 = query(collection(db, 'Transfers'), where('buyerId', '==', userId));
+
+  let data1: Transfer[] = [];
+  let data2: Transfer[] = [];
+
+  const update = () => {
+    const combined = [...data1];
+    data2.forEach(item => {
+      if (!combined.find(c => c.id === item.id)) combined.push(item);
+    });
+    callback(combined.sort((a, b) => b.createdAt - a.createdAt));
+  };
+
+  const unsub1 = onSnapshot(q1, (snap) => {
+    data1 = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: (doc.data().createdAt as Timestamp)?.toMillis() || Date.now() } as Transfer));
+    update();
+  }, (err) => { if (onError) onError(err); });
+
+  const unsub2 = onSnapshot(q2, (snap) => {
+    data2 = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: (doc.data().createdAt as Timestamp)?.toMillis() || Date.now() } as Transfer));
+    update();
+  }, (err) => { if (onError) onError(err); });
+
+  return () => { unsub1(); unsub2(); };
 };
 
 export const getPendingTransfers = async (sellerId: string): Promise<TransferRequest[]> => {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from 'firebase/auth';
 import { Item } from '../types';
-import { createTransferRequest } from '../services/itemService';
+import { requestTransfer } from '../services/itemService';
 import Spinner from '../components/Spinner';
 
 interface RequestTransferScreenProps {
@@ -40,8 +40,8 @@ const RequestTransferScreen: React.FC<RequestTransferScreenProps> = ({ item, use
         }
       }
 
-      // 2. ENVIAR CON GPS
-      await createTransferRequest(item, user, location);
+      // 2. ENVIAR CON GPS (Blindado)
+      await requestTransfer(item, user.uid, location);
       setSuccess(true);
       // Esperamos un poco para que el usuario lea el mensaje de éxito
       setTimeout(() => {

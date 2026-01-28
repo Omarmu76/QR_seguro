@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { TransferRequest, TransferStatus, Item, ItemStatus } from '../types';
-import { getPendingTransfers, getSentTransfers, approveTransfer, rejectTransfer, cancelTransfer, getAllUserItems } from '../services/itemService';
+import { approveTransfer, rejectTransfer, cancelTransfer, getAllUserItems, subscribeToIncomingTransfers, subscribeToOutgoingTransfers } from '../services/itemService';
 import Spinner from '../components/Spinner';
 
 interface TransfersScreenProps {
@@ -17,30 +17,45 @@ const TransfersScreen: React.FC<TransfersScreenProps> = ({ user, onMenuClick, on
   const [sentRequests, setSentRequests] = useState<TransferRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0); // Para forzar re-suscripción
 
   // --- LÓGICA DE COMPARTIR ---
   const [selectedForShare, setSelectedForShare] = useState<Item | null>(null);
   const [myItems, setMyItems] = useState<Item[]>([]);
 
-  const fetchRequests = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [rec, sent] = await Promise.all([
-        getPendingTransfers(user.uid),
-        getSentTransfers(user.uid)
-      ]);
-      setReceivedRequests(rec);
-      setSentRequests(sent);
-    } catch (error) {
-      console.error("Error cargando transferencias:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [user.uid]);
-
   useEffect(() => {
-    fetchRequests();
-  }, [fetchRequests]);
+    if (!user) return;
+    setErrorMsg(null);
+
+    const handleError = (err: any) => {
+      console.error("DEBUG TRANSFER ERROR:", err);
+      if (err.message?.includes("index")) {
+        setErrorMsg("⚠️ Falta un índice en Firebase. Por favor, revisa la consola del navegador y haz clic en el enlace azul para generarlo.");
+      } else {
+        setErrorMsg(`Error: ${err.message || 'No se pudo conectar con el servidor.'}`);
+      }
+    };
+
+    // A. Suscripción a Solicitudes ENTRANTES (Ventas)
+    const unsubIn = subscribeToIncomingTransfers(user.uid, (data) => {
+      console.log("📥 Solicitudes recibidas:", data.length);
+      setReceivedRequests(data);
+      if (loading) setLoading(false);
+    }, handleError);
+
+    // B. Suscripción a Solicitudes SALIENTES (Compras)
+    const unsubOut = subscribeToOutgoingTransfers(user.uid, (data) => {
+      console.log("📤 Solicitudes enviadas:", data.length);
+      setSentRequests(data);
+      if (loading) setLoading(false);
+    }, handleError);
+
+    return () => {
+      unsubIn();
+      unsubOut();
+    };
+  }, [user.uid, refreshKey]);
 
   useEffect(() => {
     const fetchMyItems = async () => {
@@ -59,7 +74,6 @@ const TransfersScreen: React.FC<TransfersScreenProps> = ({ user, onMenuClick, on
     setProcessingId(req.id);
     try {
       await approveTransfer(req.id, req.itemId, req.buyerId);
-      await fetchRequests();
       alert("¡Transferencia exitosa!");
     } catch (e) {
       alert("Error al aprobar.");
@@ -73,7 +87,6 @@ const TransfersScreen: React.FC<TransfersScreenProps> = ({ user, onMenuClick, on
     setProcessingId(id);
     try {
       await rejectTransfer(id);
-      await fetchRequests();
       alert("Solicitud rechazada.");
     } catch (e) {
       alert("Error al rechazar.");
@@ -87,7 +100,6 @@ const TransfersScreen: React.FC<TransfersScreenProps> = ({ user, onMenuClick, on
     setProcessingId(id);
     try {
       await cancelTransfer(id);
-      await fetchRequests();
     } catch (e) {
       alert("Error al cancelar.");
     } finally {
@@ -117,7 +129,16 @@ const TransfersScreen: React.FC<TransfersScreenProps> = ({ user, onMenuClick, on
           <button onClick={onMenuClick} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
             <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
-          <h1 className="text-lg font-black uppercase tracking-widest text-white italic">Transferencias</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-black uppercase tracking-widest text-white italic">Transferencias</h1>
+            <button 
+              onClick={() => setRefreshKey(prev => prev + 1)} 
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 active:scale-90 transition-all text-xs"
+              title="Refrescar Solicitudes"
+            >
+              🔄
+            </button>
+          </div>
           <div className="w-10"></div>
         </div>
 
@@ -161,6 +182,12 @@ const TransfersScreen: React.FC<TransfersScreenProps> = ({ user, onMenuClick, on
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
           
+          {errorMsg && (
+            <div className="mx-2 p-3 bg-red-900/20 border border-red-500/30 rounded-xl text-[10px] text-red-200 font-bold animate-fade-in">
+              {errorMsg}
+            </div>
+          )}
+
           {/* CONTENIDO SEGÚN PESTAÑA */}
           {activeTab === 'items' && (
             <section className="space-y-4 animate-fade-in">
