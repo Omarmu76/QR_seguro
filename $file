@@ -1,0 +1,23 @@
+﻿# INFORME TÉCNICO: PROTECCIÓN ANTI-ESPÍAS Y RASTREO DE EMERGENCIA (V7.0)
+Fecha: 29/01/2026
+Objetivo: Blindar la privacidad de dispositivos personales y estabilizar el mapa.
+
+## CAMBIOS REALIZADOS
+
+### 1. Lógica de Privacidad Anti-Espías
+Se ha implementado una restricción estricta para dispositivos de tipo \SELF_DEVICE\. Si el usuario accede desde una PC o un dispositivo que no es el vinculado originalmente, la ubicación del dispositivo personal no se mostrará en el mapa a menos que esté en estado **Denunciado**. Esto previene el rastreo no deseado cuando el dispositivo está bajo control del dueño original.
+
+### 2. Rastreo de Emergencia (Modo Denunciado)
+Cuando un usuario marca su dispositivo como **Denunciado** (por ejemplo, desde una PC tras un robo), la ubicación almacenada en la base de datos se vuelve visible instantáneamente para todos sus dispositivos vinculados, permitiendo el rastreo para recuperación.
+
+### 3. Blindaje contra "Pantallas Azules" (Crashes)
+Se ha implementado una validación centralizada mediante \isValidCoords\. Cualquier item con coordenadas corruptas, nulas o incompletas (común durante transiciones de estado como "Recuperado") será ignorado silenciosamente por el renderizador en lugar de provocar un error fatal en la aplicación.
+
+### 4. Visualización y Estados
+- **Pines PNG:** Se han mantenido los iconos PNG (\greenIcon\, \edIcon\, \purpleIcon\) para una comunicación visual clara.
+- **Badges de Popup:** El estado se muestra de forma dinámica (\DENUNCIADO\ en rojo animado o \EN REGLA\ en verde).
+- **Consistencia:** No se ha alterado la lógica de los artículos fijos que aparecen en púrpura para otros usuarios.
+
+## VERIFICACIÓN RECOMENDADA
+1. Modificar un dispositivo a \Denunciado\ desde el panel de items y verificar su aparición en el mapa remoto.
+2. Comprobar que en estado \En Regla\, el dispositivo no es visible desde otros terminales.
