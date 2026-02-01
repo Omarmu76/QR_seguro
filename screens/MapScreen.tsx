@@ -8,6 +8,7 @@ import { subscribeToUserItems, subscribeToPublicReportedItems, updateItemLocatio
 import { updateMySentryStatus, removeMySentryStatus, subscribeToActiveSentries, joinOrCreateVigila2Group, SentryNode } from '../services/sentryService';
 import Header from '../components/Header';
 import Spinner from '../components/Spinner';
+import { reportSecurityBreach } from '../services/sessionService';
 import MarkerClusterGroup from 'react-leaflet-markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
@@ -23,7 +24,7 @@ L.Marker.prototype.options.icon = DefaultIcon;
 const greenIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
 const redIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
 const purpleIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
-const blueIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+
 
 
 // --- PALETA DE COLORES VIGILA2 ---
@@ -101,6 +102,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   const [pinInput, setPinInput] = useState("");
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [silentHuntActive, setSilentHuntActive] = useState(false);
+  
+  // --- ESTADOS OJO DE DIOS (PRIVACIDAD TEMPORAL) ---
+  const [showHiddenDevices, setShowHiddenDevices] = useState(false);
+  
   const [mySentryStatus, setMySentryStatus] = useState<'ARMED' | 'ALARM' | 'RESCUE'>('ARMED');
   const [activeSentries, setActiveSentries] = useState<SentryNode[]>([]);
   const alarmAudio = useRef(new Audio('https://actions.google.com/sounds/v1/alarms/spaceship_alarm.ogg'));
@@ -353,6 +358,28 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
     alarmAudio.current.pause();
   };
 
+  /**
+   * Maneja el desbloqueo de la vista de dispositivos ocultos (Ojo de Dios).
+   * Genera una alerta de seguridad inmediata para auditoría.
+   */
+  const toggleHiddenView = () => {
+    if (showHiddenDevices) {
+       // CASO: APAGAR (Cerrar Ojo) -> Silencioso
+       setShowHiddenDevices(false);
+    } else {
+       // CASO: ENCENDER (Abrir Ojo) -> Ruidoso
+       setShowHiddenDevices(true);
+       
+       // 🔥 EL CHIVATO: Avisar a la base de datos que se abrió la vista
+       if (currentDeviceId) {
+           reportSecurityBreach(currentDeviceId); 
+       }
+       
+       // Feedback local
+       alert("👁️ VISTA OCULTA ACTIVADA. Se ha enviado una notificación de seguridad a tu dispositivo principal.");
+    }
+  };
+
   // 5. RENDERIZADO MAPA
   const displayedItems = useMemo(() => {
     const allItemsMap = new Map<string, Item>();
@@ -438,12 +465,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
         } 
         // CASO B: Es mi dispositivo pero lo miro desde otro lado (PC/Otro Celular)
         else if (isSelfDevice && !isThisHandset) {
-           // REGLA DE PRIVACIDAD: Si NO está denunciado, NO LO MOSTRAMOS.
+           // REGLA DE PRIVACIDAD: Si NO está denunciado y el "Ojo de Dios" está apagado, NO LO MOSTRAMOS.
            // Esto evita que alguien use tu cuenta en otro lado para espiarte.
-           if (!isDenunciado) {
+           if (!isDenunciado && !showHiddenDevices) {
              return null; // Ocultar marcador completamente
            }
-           // Si está denunciado, 'position' ya tiene 'item.location' (DB), así que lo mostramos.
+           // Si está denunciado o se activó el "Ojo de Dios", permitimos la visualización.
         }
 
         // Fallback para estáticos o recuperación
@@ -460,21 +487,15 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
         // 3. SELECCIÓN VISUAL (ICONOS)
         // -----------------------------------------------------------
         let selectedIcon = greenIcon; // Default
-        let pinColor = '#3B82F6'; // Para el círculo del popup
-
         if (item.ownerId === user.uid && isDenunciado) {
            selectedIcon = redIcon;
-           pinColor = '#EF4444';
         } else if (item.ownerId !== user.uid && isDenunciado) {
            selectedIcon = purpleIcon;
-           pinColor = '#8B5CF6';
         } else if (item.ownerId === user.uid && !isDenunciado) {
            selectedIcon = greenIcon;
-           pinColor = '#10B981';
         } else if (item.ownerId !== user.uid) {
            // Items de amigos o públicos seguros
            selectedIcon = greenIcon;
-           pinColor = '#10B981';
         }
 
         // --- REGLA VIGILA2: Color de Grupo para Imantados ---
@@ -684,6 +705,16 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
         <div className="absolute bottom-28 right-4 z-[1000] flex flex-col gap-4 items-end">
           <button onClick={onScanRequest} className={`${fabClass} bg-gradient-to-tr from-blue-600 to-cyan-500 border-none`}><QrIcon /></button>
           <button onClick={onInputCodeRequest} className={fabClass}> <span className="font-bold text-sm">123</span></button>
+          
+          {/* BOTÓN OJO DE DIOS (DESBLOQUEO DE PRIVACIDAD) */}
+          <button 
+            onClick={toggleHiddenView}
+            className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl border border-white/10 transition-all duration-500 z-10 ${showHiddenDevices ? 'bg-red-600 text-white animate-pulse shadow-[0_0_20px_rgba(220,38,38,0.5)]' : 'bg-[#111928]/90 backdrop-blur-xl text-gray-400'}`}
+            style={{ marginBottom: '10px' }}
+          >
+            <span className="text-2xl filter drop-shadow-md">{showHiddenDevices ? '👁️' : '🔒'}</span>
+          </button>
+
           <button onClick={handleMainShieldClick} className={`w-16 h-16 rounded-full flex items-center justify-center shadow-2xl border-4 transition-all z-10 ${vigiaMode ? (mySentryStatus === 'ALARM' ? 'bg-red-600 border-red-400 animate-pulse' : (vigiaType === 'GROUP' ? 'bg-yellow-600 border-yellow-400' : 'bg-blue-600 border-blue-400')) : 'bg-[#111928]/90 backdrop-blur-xl border-white/10 text-white'}`}> <span className="text-3xl filter drop-shadow-md">{vigiaMode ? (mySentryStatus === 'ALARM' ? '🚨' : (vigiaType === 'GROUP' ? '⚜️' : '🛡️')) : '🛡️'}</span> </button>
         </div>
       </div>

@@ -102,6 +102,9 @@ const SideMenu: React.FC<SideMenuProps> = ({
           <button onClick={() => onNavigate(Screen.TRANSFERS)} className={menuBtnClass}>
             <span className={iconClass}>💸</span> TRANSFERIR / VENDER
           </button>
+          <button onClick={() => onNavigate(Screen.ACTIVE_SESSIONS)} className={menuBtnClass}>
+            <span className={iconClass}>🔐</span> SESIONES ACTIVAS
+          </button>
           {/* 
           // [EN ESPERA] Opción 'Vender' ocultada según Protocolo de Unificación
           <button onClick={() => onNavigate(Screen.SELL)} className={menuBtnClass}>
