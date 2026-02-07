@@ -201,8 +201,6 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
                       <option>Celular</option>
                       <option>Notebook</option>
                       <option>Bicicleta</option>
-                      <option>Documentación</option>
-                      <option>Mochila</option>
                       <option>Otro</option>
                     </select>
                     <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-blue-400">
