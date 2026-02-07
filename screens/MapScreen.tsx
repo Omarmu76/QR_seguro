@@ -606,6 +606,23 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
         </div>
       )}
 
+      {/* --- CABECERA COMPACTA CON FILTROS --- */}
+      <div className="absolute top-0 left-0 right-0 z-[1100] bg-black/50 backdrop-blur-md border-b border-white/5 px-2 py-1.5 flex items-center justify-between pointer-events-auto">
+        <button className="p-2 text-white/70" onClick={onMenuClick}>
+          <svg fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </svg>
+        </button>
+        
+        <div className="flex bg-black/60 p-0.5 rounded-lg border border-white/10">
+          <button onClick={() => setFilterMode('all')} className={`px-2.5 py-1 text-[9px] uppercase font-black tracking-tighter transition-all rounded-md ${filterMode === 'all' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>Todos</button>
+          <button onClick={() => setFilterMode('alerts')} className={`px-2.5 py-1 text-[9px] uppercase font-black tracking-tighter transition-all rounded-md ${filterMode === 'alerts' ? 'bg-red-600 text-white' : 'text-gray-500'}`}>Alertas</button>
+          <button onClick={() => setFilterMode('mine')} className={`px-2.5 py-1 text-[9px] uppercase font-black tracking-tighter transition-all rounded-md ${filterMode === 'mine' ? 'bg-green-600 text-white' : 'text-gray-500'}`}>Mis Cosas</button>
+        </div>
+
+        <div className="w-9"></div> {/* Espaciador para centrar filtros */}
+      </div>
+
       {showPinModal && (
         <div className="absolute inset-0 z-[2000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className={glassCardClass}>
@@ -723,31 +740,24 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
           </div>
         )}
 
-        <div className="absolute top-24 left-0 right-0 z-[1000] flex justify-center gap-2 px-4 pointer-events-none">
-          <div className="pointer-events-auto flex gap-3 p-1 rounded-2xl bg-black/20 backdrop-blur-md border border-white/5">
-            <button onClick={() => setFilterMode('all')} className={filterMode === 'all' ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl px-4 py-2 text-xs font-bold" : "bg-[#111928]/80 text-white rounded-xl px-4 py-2 text-xs"}>🌎 Todos</button>
-            <button onClick={() => setFilterMode('alerts')} className={filterMode === 'alerts' ? "bg-red-600 text-white rounded-xl px-4 py-2 text-xs font-bold" : "bg-[#111928]/80 text-white rounded-xl px-4 py-2 text-xs"}>🚨 Alertas</button>
-            <button onClick={() => setFilterMode('mine')} className={filterMode === 'mine' ? "bg-green-600 text-white rounded-xl px-4 py-2 text-xs font-bold" : "bg-[#111928]/80 text-white rounded-xl px-4 py-2 text-xs"}>👤 Mis Cosas</button>
-          </div>
-        </div>
-
-        <div className="absolute bottom-28 right-4 z-[1000] flex flex-col gap-4 items-end">
-          <button onClick={onScanRequest} className={`${fabClass} bg-gradient-to-tr from-blue-600 to-cyan-500 border-none`}><QrIcon /></button>
-          <button onClick={onInputCodeRequest} className={fabClass}> <span className="font-bold text-sm">123</span></button>
+        {/* --- BOTONES DE ACCIÓN (FABs) --- */}
+        <div className="absolute bottom-28 right-4 z-[1000] flex flex-col gap-3 items-center">
+          <button onClick={onScanRequest} className={`${fabClass} bg-[#111928]/90 border border-white/10 text-white shadow-xl shadow-blue-500/10 hover:bg-blue-600 transition-all`}><QrIcon /></button>
+          <button onClick={onInputCodeRequest} className={`${fabClass} bg-[#111928]/90 backdrop-blur-xl border border-white/10 text-white shadow-xl hover:bg-gray-800 transition-all`}> <span className="font-bold text-sm">123</span></button>
           
-          {/* BOTÓN OJO DE DIOS (DESBLOQUEO DE PRIVACIDAD) */}
           <button 
             onClick={toggleHiddenView}
             className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl border border-white/10 transition-all duration-500 z-10 ${showHiddenDevices ? 'bg-red-600 text-white animate-pulse shadow-[0_0_20px_rgba(220,38,38,0.5)]' : 'bg-[#111928]/90 backdrop-blur-xl text-gray-400'}`}
-            style={{ marginBottom: '10px' }}
           >
             <span className="text-2xl filter drop-shadow-md">{showHiddenDevices ? '👁️' : '🔒'}</span>
           </button>
 
           <button onClick={handleMainShieldClick} className={`w-16 h-16 rounded-full flex items-center justify-center shadow-2xl border-4 transition-all z-10 ${vigiaMode ? (mySentryStatus === 'ALARM' ? 'bg-red-600 border-red-400 animate-pulse' : (vigiaType === 'GROUP' ? 'bg-yellow-600 border-yellow-400' : 'bg-blue-600 border-blue-400')) : 'bg-[#111928]/90 backdrop-blur-xl border-white/10 text-white'}`}> <span className="text-3xl filter drop-shadow-md">{vigiaMode ? (mySentryStatus === 'ALARM' ? '🚨' : (vigiaType === 'GROUP' ? '⚜️' : '🛡️')) : '🛡️'}</span> </button>
         </div>
+
       </div>
     </div>
   );
 };
+
 export default MapScreen;

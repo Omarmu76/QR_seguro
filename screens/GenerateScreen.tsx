@@ -170,7 +170,7 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
       </div>
 
       {/* 3. COLUMNA CENTRAL (App Flotante) */}
-      <div className="w-full h-full lg:max-w-md lg:h-[95vh] lg:rounded-[2.5rem] lg:border-[8px] lg:border-[#1a1f35] lg:shadow-2xl bg-[#0d1226] flex flex-col relative z-10 overflow-hidden transition-all duration-300">
+      <div className="w-full h-full lg:max-w-md lg:h-[95dvh] lg:rounded-[2.5rem] lg:border-[8px] lg:border-[#1a1f35] lg:shadow-2xl bg-[#0d1226] flex flex-col relative z-10 overflow-hidden transition-all duration-300">
 
         {/* FONDO DECORATIVO INTERNO */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
@@ -181,13 +181,13 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
         <Header title="NUEVO PROTEGIDO" onMenuClick={onMenuClick} />
 
         {/* CONTENIDO SCROLLABLE */}
-        <div className="flex-grow p-4 overflow-y-auto custom-scrollbar z-10 flex flex-col items-center justify-start pb-20">
-          <div className="w-full max-w-md space-y-5">
+        <div className="flex-grow p-4 overflow-y-auto custom-scrollbar z-10 flex flex-col items-center justify-start pb-24 relative">
+          <div className="w-full max-w-md space-y-3">
 
             <form onSubmit={handleSubmit} className={glassCardClass}>
               <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-400/50 to-transparent"></div>
 
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div>
                   <label className={labelClass}>Tipo de Artículo</label>
                   <div className="relative">
@@ -287,7 +287,7 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
 
             </form>
 
-            <div className="space-y-4 pt-2">
+            <div className="space-y-3 pt-1">
 
               <div className="flex items-center justify-center gap-2 text-xs py-2 rounded-full bg-black/20 border border-white/5 mx-auto w-fit px-4">
                 <div className={bestLocation ? "text-green-500" : "text-yellow-500 animate-pulse"}>
@@ -325,10 +325,18 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
                     <span className="text-sm font-normal animate-pulse">{loadingMessage}</span>
                   </>
                 ) : (
-                  <>GENERAR CÓDIGO QR</>
+                  <>GENERAR</>
                 )}
               </button>
             </div>
+          </div>
+
+          {/* INDICADOR DE SCROLL SUTIL (Posicionado arriba del botón) */}
+          <div className="absolute bottom-[100px] left-1/2 -translate-x-1/2 flex flex-col items-center animate-bounce opacity-50 pointer-events-none">
+            <span className="text-[10px] text-blue-400 uppercase tracking-tighter mb-1 font-bold">Más abajo</span>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
+            </svg>
           </div>
         </div>
 

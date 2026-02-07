@@ -48,12 +48,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
     };
 
     return (
-        <div className="w-full h-full bg-black flex justify-center items-center relative overflow-hidden">
+        <div className="w-full min-h-[100dvh] bg-black flex justify-center items-center relative overflow-hidden">
             {/* ESPACIO PUBLICIDAD IZQUIERDA (Solo PC) */}
             <div id="ad-space-left" className="hidden lg:flex flex-1 h-full items-center justify-center z-0 relative"></div>
 
             {/* LA APP (Caja Central Flotante) */}
-            <div className="w-full h-full lg:max-w-md lg:h-[95vh] lg:rounded-[2.5rem] lg:border-[8px] lg:border-[#1a1f35] lg:shadow-2xl overflow-hidden transition-all duration-300 relative z-10">
+            <div className="w-full h-full lg:max-w-md lg:h-[95dvh] lg:rounded-[2.5rem] lg:border-[8px] lg:border-[#1a1f35] lg:shadow-2xl overflow-hidden transition-all duration-300 relative z-10">
                 <div className="home-container h-full">
                     {/* ================================================================
           [SECCIÓN DE ESTILOS CSS] - AQUÍ OCURRE LA MAGIA VISUAL
@@ -70,7 +70,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
           background-color: #050b14;
           background-image: radial-gradient(circle at 50% 0%, #1a2c4e 0%, #050b14 60%);
           
-          min-height: 100vh;
+          min-height: 100dvh;
           width: 100%;
           display: flex;
           justify-content: center; /* Centra todo horizontalmente */
@@ -80,7 +80,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
           
           /* [ESPACIADO GENERAL] Controla qué tan pegado al borde superior e inferior está el contenido */
           padding-top: 5px;    /* Aumenta esto para bajar todo el contenido */
-          padding-bottom: 90px; /* Espacio al final para que no se corte el último botón */
+          padding-bottom: 120px; /* Aumentado a 120px para asegurar que no tape el Navbar */
           position: relative;
         }
 
@@ -391,14 +391,22 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
                             />
                         </div>
 
-                        {/* 2. BOTÓN GRANDE (Escanear) */}
-                        <button className="btn-main" onClick={() => handleAction('scan')}>
-                            <svg className="svg-icon-lg" viewBox="0 0 448 512">
-                                {/* Path del icono QR */}
-                                <path d="M0 80C0 53.5 21.5 32 48 32h96c26.5 0 48 21.5 48 48v96c0 26.5-21.5 48-48 48H48c-26.5 0-48-21.5-48-48V80zM64 96v64h64V96H64zM0 336c0-26.5 21.5-48 48-48h96c26.5 0 48 21.5 48 48v96c0 26.5-21.5 48-48 48H48c-26.5 0-48-21.5-48-48V336zM64 352v64h64V352H64zM304 32h96c26.5 0 48 21.5 48 48v96c0 26.5-21.5 48-48 48H304c-26.5 0-48-21.5-48-48V80c0-26.5 21.5-48 48-48zm48 64v64h64V96H352zM256 304c0-8.8 7.2-16 16-16h64c8.8 0 16 7.2 16 16s7.2 16 16 16h32c8.8 0 16-7.2 16-16s7.2-16 16-16s16 7.2 16 16v96c0 8.8-7.2 16-16 16H368c-8.8 0-16-7.2-16-16s-7.2-16-16-16s-16 7.2-16 16v64c0 8.8-7.2 16-16 16H272c-8.8 0-16-7.2-16-16V304zM368 480a16 16 0 1 1 0-32 16 16 0 1 1 0 32z" />
-                            </svg>
-                            Escanear QR {/* [TEXTO BOTÓN] Cámbialo aquí si deseas */}
-                        </button>
+                        {/* 2. GRID SUPERIOR (Escanear / Manual) */}
+                        <div className="grid-buttons">
+                            <button className="btn-main" onClick={() => handleAction('scan')} style={{ padding: '12px' }}>
+                                <svg className="svg-icon-lg" viewBox="0 0 448 512">
+                                    <path d="M0 80C0 53.5 21.5 32 48 32h96c26.5 0 48 21.5 48 48v96c0 26.5-21.5 48-48 48H48c-26.5 0-48-21.5-48-48V80zM64 96v64h64V96H64zM0 336c0-26.5 21.5-48 48-48h96c26.5 0 48 21.5 48 48v96c0 26.5-21.5 48-48 48H48c-26.5 0-48-21.5-48-48V336zM64 352v64h64V352H64zM304 32h96c26.5 0 48 21.5 48 48v96c0 26.5-21.5 48-48 48H304c-26.5 0-48-21.5-48-48V80c0-26.5 21.5-48 48-48zm48 64v64h64V96H352zM256 304c0-8.8 7.2-16 16-16h64c8.8 0 16 7.2 16 16s7.2 16 16 16h32c8.8 0 16-7.2 16-16s7.2-16 16-16s16 7.2 16 16v96c0 8.8-7.2 16-16 16H368c-8.8 0-16-7.2-16-16s-7.2-16-16-16s-16 7.2-16 16v64c0 8.8-7.2 16-16 16H272c-8.8 0-16-7.2-16-16V304zM368 480a16 16 0 1 1 0-32 16 16 0 1 1 0 32z" />
+                                </svg>
+                                Escanear
+                            </button>
+
+                            <button className="btn-medium bg-[#111928]/90 border border-white/10" onClick={() => handleAction('manual')}>
+                                <svg className="svg-icon" viewBox="0 0 576 512">
+                                    <path d="M64 64C28.7 64 0 92.7 0 128V384c0 35.3 28.7 64 64 64H512c35.3 0 64-28.7 64-64V128c0-35.3-28.7-64-64-64H64zm16 64h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H80c-8.8 0-16-7.2-16-16V144c0-8.8 7.2-16 16-16zM64 240c0-8.8 7.2-16 16-16h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H80c-8.8 0-16-7.2-16-16V240zm16 80h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H80c-8.8 0-16-7.2-16-16V336c0-8.8 7.2-16 16-16zm80-176c0-8.8 7.2-16 16-16h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H176c-8.8 0-16-7.2-16-16V144zm16 80h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H176c-8.8 0-16-7.2-16-16V240c0-8.8 7.2-16 16-16zM160 336c0-8.8 7.2-16 16-16H400c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H176c-8.8 0-16-7.2-16-16V336zM272 128h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H272c-8.8 0-16-7.2-16-16V144c0-8.8 7.2-16 16-16zM256 240c0-8.8 7.2-16 16-16h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H272c-8.8 0-16-7.2-16-16V240zM368 128h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H368c-8.8 0-16-7.2-16-16V144c0-8.8 7.2-16 16-16zM352 240c0-8.8 7.2-16 16-16h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H368c-8.8 0-16-7.2-16-16V240zM464 128h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H464c-8.8 0-16-7.2-16-16V144c0-8.8 7.2-16 16-16V240zm16 80h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H464c-8.8 0-16-7.2-16-16V336c0-8.8 7.2-16 16-16z" />
+                                </svg>
+                                123 Manual
+                            </button>
+                        </div>
 
                         {/* 3. BOTONES MEDIANOS (Grid) */}
                         <div className="grid-buttons">
@@ -455,21 +463,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
                                 </svg>
                             </div>
 
-                            {/* Ingreso Manual */}
-                            <div className="btn-list" onClick={() => handleAction('manual')}>
-                                <div className="list-icon-wrapper">
-                                    <div className="icon-box">
-                                        <svg className="svg-icon" viewBox="0 0 576 512" style={{ width: '20px' }}>
-                                            <path d="M64 64C28.7 64 0 92.7 0 128V384c0 35.3 28.7 64 64 64H512c35.3 0 64-28.7 64-64V128c0-35.3-28.7-64-64-64H64zm16 64h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H80c-8.8 0-16-7.2-16-16V144c0-8.8 7.2-16 16-16zM64 240c0-8.8 7.2-16 16-16h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H80c-8.8 0-16-7.2-16-16V240zm16 80h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H80c-8.8 0-16-7.2-16-16V336c0-8.8 7.2-16 16-16zm80-176c0-8.8 7.2-16 16-16h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H176c-8.8 0-16-7.2-16-16V144zm16 80h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H176c-8.8 0-16-7.2-16-16V240c0-8.8 7.2-16 16-16zM160 336c0-8.8 7.2-16 16-16H400c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H176c-8.8 0-16-7.2-16-16V336zM272 128h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H272c-8.8 0-16-7.2-16-16V144c0-8.8 7.2-16 16-16zM256 240c0-8.8 7.2-16 16-16h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H272c-8.8 0-16-7.2-16-16V240zM368 128h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H368c-8.8 0-16-7.2-16-16V144c0-8.8 7.2-16 16-16zM352 240c0-8.8 7.2-16 16-16h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H368c-8.8 0-16-7.2-16-16V240zM464 128h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H464c-8.8 0-16-7.2-16-16V144c0-8.8 7.2-16 16-16V240zm16 80h32c8.8 0 16 7.2 16 16v32c0 8.8-7.2 16-16 16H464c-8.8 0-16-7.2-16-16V336c0-8.8 7.2-16 16-16z" />
-                                        </svg>
-                                    </div>
-                                    <span>Ingreso Manual</span>
-                                </div>
-                                <svg className="svg-icon arrow-icon" viewBox="0 0 320 512" style={{ width: '12px' }}>
-                                    <path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z" />
-                                </svg>
-                            </div>
+                        </div>
 
+                        {/* INDICADOR DE SCROLL ANIMADO */}
+                        <div className="flex flex-col items-center animate-bounce opacity-40 py-2 pointer-events-none">
+                            <span className="text-[11px] text-blue-400 uppercase tracking-widest mb-1 font-bold">Desliza para más</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                            </svg>
                         </div>
 
                     </div>
