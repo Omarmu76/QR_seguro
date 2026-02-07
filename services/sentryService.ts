@@ -12,6 +12,7 @@ export interface SentryNode {
     status: 'ARMED' | 'ALARM' | 'RESCUE' | 'RESOLVED'; // Agregamos 'RESOLVED'
     timestamp: number;
     groupCode?: string; // Código de Vigila2 (si es null, es individual)
+    deviceName?: string; // <--- Agregamos nombre del dispositivo
     dynamicItems?: any[]; // Lista de items GPS del usuario (Auto, Moto, etc)
 }
 
@@ -32,7 +33,8 @@ export const updateMySentryStatus = async (
     lng: number,
     status: 'ARMED' | 'ALARM' | 'RESCUE' | 'RESOLVED',
     groupCode?: string,
-    dynamicItems: any[] = []
+    dynamicItems: any[] = [],
+    deviceName?: string // <--- Nuevo parámetro
 ): Promise<void> => {
     try {
         const sentryRef = doc(db, "sentries", userId);
@@ -42,6 +44,7 @@ export const updateMySentryStatus = async (
             lng,
             status,
             groupCode: groupCode || null, // Guardamos el código si existe
+            deviceName: deviceName || 'Desconocido', // <--- Guardamos nombre
             dynamicItems,
             timestamp: Date.now()
         }, { merge: true });

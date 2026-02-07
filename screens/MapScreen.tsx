@@ -41,6 +41,12 @@ const GROUP_COLORS = [
     '#F43F5E'  // Coral
 ];
 
+// --- PALETA DE 10 COLORES PARA EL ENJAMBRE (Diferentes a los del sistema) ---
+const SWARM_COLORS = [
+  '#EFFF00', '#FF8C00', '#FF00FF', '#32CD32', '#DAA520', 
+  '#C0C0C0', '#008B8B', '#F0F0F0', '#B8860B', '#FF8066'
+];
+
 // --- MARCADORES PERSONALIZADOS ---
 
 // --- ICONOS VIGÍA ---
@@ -219,14 +225,14 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
               if (dist > 30) {
                 if (mySentryStatus !== 'ALARM') {
                   setMySentryStatus('ALARM');
-                  updateMySentryStatus(user.uid, newPos.lat, newPos.lng, 'ALARM', vigiaType === 'GROUP' ? vigiaPin : undefined, myDynamicItems);
+                  updateMySentryStatus(user.uid, newPos.lat, newPos.lng, 'ALARM', vigiaType === 'GROUP' ? vigiaPin : undefined, myDynamicItems, localStorage.getItem('qr_device_name') || undefined);
                 }
               } else {
                 if (mySentryStatus === 'ALARM') setMySentryStatus('ARMED');
-                updateMySentryStatus(user.uid, newPos.lat, newPos.lng, mySentryStatus, vigiaType === 'GROUP' ? vigiaPin : undefined, myDynamicItems);
+                updateMySentryStatus(user.uid, newPos.lat, newPos.lng, mySentryStatus, vigiaType === 'GROUP' ? vigiaPin : undefined, myDynamicItems, localStorage.getItem('qr_device_name') || undefined);
               }
             } else {
-              updateMySentryStatus(user.uid, newPos.lat, newPos.lng, 'RESCUE', vigiaType === 'GROUP' ? vigiaPin : undefined, myDynamicItems);
+              updateMySentryStatus(user.uid, newPos.lat, newPos.lng, 'RESCUE', vigiaType === 'GROUP' ? vigiaPin : undefined, myDynamicItems, localStorage.getItem('qr_device_name') || undefined);
             }
 
             let triggerAlarm = false;
@@ -269,6 +275,23 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
               }
             }
           });
+
+          // MONITOREO DE ENJAMBRE (ALERTA DE RUPTURA > 50M)
+          if (vigiaMode && vigiaType === 'GROUP' && vigiaPin) {
+            activeSentries.forEach(member => {
+              if (member.groupCode === vigiaPin && member.status === 'ARMED') {
+                const distToAlly = getDistance(newPos.lat, newPos.lng, member.lat, member.lng);
+                if (distToAlly > 50) {
+                   // 🔥 DISPARAR ALERTA GRUPAL
+                   if (alarmAudio.current.paused) {
+                     alarmAudio.current.play().catch(() => {});
+                   }
+                   if (navigator.vibrate) navigator.vibrate([1000, 500, 1000]);
+                   console.warn(`🚨 RUPTURA DE PERÍMETRO: ${member.deviceName || 'Aliado'} se alejó del grupo!`);
+                }
+              }
+            });
+          }
 
           // Actualizar Items Vinculados
           myItemsRef.current.filter(item =>
@@ -325,7 +348,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
         marca: item.marca
       }));
 
-    updateMySentryStatus(user.uid, userPos!.lat, userPos!.lng, 'ARMED', vigiaType === 'GROUP' ? pinInput : undefined, myDynamicItems);
+    updateMySentryStatus(user.uid, userPos!.lat, userPos!.lng, 'ARMED', vigiaType === 'GROUP' ? pinInput : undefined, myDynamicItems, localStorage.getItem('qr_device_name') || undefined);
     setShowPinModal(null);
   };
 
@@ -354,7 +377,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
         tipo: item.tipo,
         marca: item.marca
       }));
-    updateMySentryStatus(user.uid, userPos!.lat, userPos!.lng, 'RESCUE', vigiaType === 'GROUP' ? vigiaPin : undefined, myDynamicItems);
+    updateMySentryStatus(user.uid, userPos!.lat, userPos!.lng, 'RESCUE', vigiaType === 'GROUP' ? vigiaPin : undefined, myDynamicItems, localStorage.getItem('qr_device_name') || undefined);
     alarmAudio.current.pause();
   };
 
@@ -498,22 +521,27 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
            selectedIcon = greenIcon;
         }
 
-        // --- REGLA VIGILA2: Color de Grupo para Imantados ---
-        if (myGroupColor && isSelfDevice && item.ownerId === user.uid && !isDenunciado) {
+        // --- REGLA VIGILA2: Color de Grupo para Imantados o Aliados Protegidos ---
+        const memberIdx = groupMembership.findIndex(m => m.userId === item.ownerId);
+        if (memberIdx !== -1 && !isDenunciado) {
+           const allyColor = SWARM_COLORS[memberIdx % SWARM_COLORS.length];
            return (
             <Marker key={`item-${item.qrId}`} position={[position.lat, position.lng]} icon={new L.DivIcon({
-                className: 'my-group-item-pin',
-                html: `<div style="background-color: ${myGroupColor}; width: 14px; height: 14px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 5px ${myGroupColor};"></div>`,
+                className: 'ally-item-pin',
+                html: `<div style="background-color: ${allyColor}; width: 14px; height: 14px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 5px ${allyColor};"></div>`,
                 iconSize: [14, 14],
                 iconAnchor: [7, 7]
             })}>
                <Popup className="classic-popup" closeButton={false}>
-                  <div className={`flex flex-col items-center min-w-[150px] p-3 text-center rounded-lg border-2 shadow-xl bg-white border-blue-600`}>
-                    <div className="px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-2 text-white shadow-sm bg-blue-600">
-                      MI GPS ({item.tipo})
+                  <div className={`flex flex-col items-center min-w-[150px] p-3 text-center rounded-lg border-2 shadow-xl bg-white`} style={{ borderColor: allyColor }}>
+                    <div className="px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-2 text-white shadow-sm" style={{ backgroundColor: allyColor }}>
+                      ALIADO PROTEGIDO ({item.tipo})
                     </div>
                     <h3 className="text-gray-900 font-extrabold text-sm m-0 leading-tight">{item.marca}</h3>
                     <p className="text-gray-500 font-bold text-xs uppercase mb-2">{item.modelo}</p>
+                    <div className="w-full border-t border-gray-200 pt-1 mt-1">
+                      <p className="text-[9px] text-gray-400 font-mono italic">Dispositivo: {item.linkedDeviceId?.slice(0, 8) || 'Desconocido'}</p>
+                    </div>
                   </div>
                </Popup>
             </Marker>
@@ -628,6 +656,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
                       <Popup autoClose={false} closeButton={false}>
                         <div className="text-center p-2">
                           <span className="font-bold text-xs" style={{ color: memberColor }}>MIEMBRO GRUPO</span>
+                          <div className="text-[10px] text-gray-500 italic mt-1">{sentry.deviceName || 'Vigía Activo'}</div>
                           {sentry.status === 'ALARM' && <div className="text-red-600 font-black animate-pulse">¡EN PELIGRO!</div>}
                         </div>
                       </Popup>
@@ -679,7 +708,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
                       tipo: item.tipo,
                       marca: item.marca
                     }));
-                  updateMySentryStatus(user.uid, userPos!.lat, userPos!.lng, 'RESOLVED', vigiaPin, myDynamicItems);
+                  updateMySentryStatus(user.uid, userPos!.lat, userPos!.lng, 'RESOLVED', vigiaPin, myDynamicItems, localStorage.getItem('qr_device_name') || undefined);
                   
                   alarmAudio.current.pause();
                   setVigiaMode(false);
