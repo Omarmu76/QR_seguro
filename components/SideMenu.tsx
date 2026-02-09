@@ -139,6 +139,18 @@ const SideMenu: React.FC<SideMenuProps> = ({
             <span className={iconClass}>⚖️</span> LEGALES Y PRIVACIDAD
           </button>
 
+
+          {/* LINK EXTERNO COMPRAREN */}
+          <div className="mt-3 pt-1.5 border-t border-white/5">
+            <button 
+              onClick={() => window.open('https://compraren.com.ar/', '_blank')} 
+              className={menuBtnClass}
+            >
+              <span className={iconClass}>🛒</span> 
+              <span className="font-bold text-[10px] uppercase tracking-wider">compr<span className="text-blue-500">A</span>ren</span>
+            </button>
+          </div>
+
           {/* ADMIN */}
           {isAdmin && (
             <div className="mt-3 pt-1.5 border-t border-purple-500/20">
