@@ -143,15 +143,26 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   /**
    * Explicación (Paso 4): Detector de Denuncias Cercanas.
    * Si la lista de ítems denunciados cambia y hay denuncias activas,
-   * mostramos un aviso visual discreto durante 5 segundos.
+   * mostramos un aviso visual discreto durante 5 segundos, pero SOLO si hay una denuncia a menos de 5KM.
    */
   useEffect(() => {
-    if (publicItems.length > 0) {
-      setShowToast(true);
-      const timer = setTimeout(() => setShowToast(false), 5000);
-      return () => clearTimeout(timer);
+    if (publicItems.length > 0 && userPos) {
+      // Verificamos si hay alguna denuncia pública a menos de 5000 metros (5KM)
+      const nearbyAlert = publicItems.some(item => {
+        if (isValidCoords(item.location)) {
+          const dist = getDistance(userPos.lat, userPos.lng, item.location.lat, item.location.lng);
+          return dist < 5000;
+        }
+        return false;
+      });
+
+      if (nearbyAlert) {
+        setShowToast(true);
+        const timer = setTimeout(() => setShowToast(false), 5000);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [publicItems]);
+  }, [publicItems, userPos]);
 
   // 2. DETECTOR DE ROBOS (Refactorizado: PROTOCOLO DE GEO-SEGURIDAD)
   const [alertTriggered, setAlertTriggered] = useState<string | null>(null);
@@ -406,27 +417,26 @@ const MapScreen: React.FC<MapScreenProps> = ({ user, onMenuClick, onScanRequest,
   // 5. RENDERIZADO MAPA
   const displayedItems = useMemo(() => {
     const allItemsMap = new Map<string, Item>();
-    const isPaid = (item: Item) => item.paymentStatus === PaymentStatus.Paid || item.paymentStatus === PaymentStatus.Free;
-
+    // Filtros auxiliares eliminados por no ser requeridos en la lógica final
     if (filterMode === 'all') {
-      myItems.filter(isPaid).forEach(i => { if (i.qrId) allItemsMap.set(i.qrId, i); });
+      // TODOS: Mis items + Alertas públicas
+      myItems.forEach(i => { if (i.qrId) allItemsMap.set(i.qrId, i); });
       publicItems.forEach(i => { if (i.qrId) allItemsMap.set(i.qrId, i); });
     }
     else if (filterMode === 'mine') {
-      myItems.filter(isPaid).forEach(i => { if (i.qrId) allItemsMap.set(i.qrId, i); });
+      // MIS COSAS: Mis items (En Regla, Recuperados y Denunciados propios)
+      myItems.forEach(i => { if (i.qrId) allItemsMap.set(i.qrId, i); });
     }
     else if (filterMode === 'alerts') {
-      // LOGICA DE BLINDAJE: 
-      // Muestra items 'Denunciado', PERO excluye forzosamente cualquiera que sea 'Recuperado'.
-      // Garantiza que las alertas sean solo amenazas activas.
-      const isActiveAlert = (i: Item) =>
-        i.status === ItemStatus.Denunciado && (i.status as any) !== ItemStatus.Recuperado;
+      // ALERTAS: Mis Denuncias (Rojo) + Denuncias Públicas (Púrpura)
+      // EXCLUIMOS Recuperados forzosamente
+      const isActiveAlert = (i: Item) => i.status === ItemStatus.Denunciado;
 
-      publicItems.filter(isActiveAlert).forEach(i => allItemsMap.set(i.qrId!, i));
-      myItems.filter(isActiveAlert).forEach(i => allItemsMap.set(i.qrId!, i));
+      publicItems.filter(isActiveAlert).forEach(i => { if (i.qrId) allItemsMap.set(i.qrId, i); });
+      myItems.filter(isActiveAlert).forEach(i => { if (i.qrId) allItemsMap.set(i.qrId, i); });
     }
     return Array.from(allItemsMap.values());
-  }, [myItems, publicItems, filterMode]);
+  }, [myItems, publicItems, filterMode, user.uid]);
 
   const center = isValidCoords(userPos) ? userPos : (isValidCoords(initPos) ? initPos : { lat: -34.6037, lng: -58.3816 });
 
