@@ -110,6 +110,16 @@ export interface Item {
   paymentTransactionId?: string;
   lastPaymentDate?: any;
   reward?: number; // <--- NUEVO: Recompensa por recuperación
+
+  // --- NUEVOS CAMPOS FORMULARIO PROFESIONAL V1.0 ---
+  subtipo?: string;     // Nombre específico: ej: Moto, Notebook
+  patente?: string;    // Legal Vehículos
+  chassis?: string;    // Legal Vehículos/Bicis
+  motor?: string;      // Legal Vehículos
+  imei?: string;       // Legal Celulares
+  serialNumber?: string; // Legal Electrónica
+  facturaNro?: string; // Respaldo legal
+  pais?: string;        // Localización (Default: 'AR')
 }
 
 export interface PaymentNotification {

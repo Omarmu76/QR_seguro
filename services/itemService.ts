@@ -145,7 +145,16 @@ export const saveItem = async (
             reward: Number(itemData.reward || 0),
             trackingType: String(itemData.trackingType || 'PASSIVE'),
             linkedDeviceId: String(itemData.linkedDeviceId || ""),
-            qrId: ""
+            qrId: "",
+            // --- NUEVOS CAMPOS PROFESIONAL V1.0 ---
+            subtipo: String(itemData.subtipo || ''),
+            patente: String(itemData.patente || '').toUpperCase(),
+            chassis: String(itemData.chassis || '').toUpperCase(),
+            motor: String(itemData.motor || '').toUpperCase(),
+            imei: String(itemData.imei || ''),
+            serialNumber: String(itemData.serialNumber || ''),
+            facturaNro: String(itemData.facturaNro || ''),
+            pais: String(itemData.pais || 'AR'),
         };
 
         console.table(cleanPayload);

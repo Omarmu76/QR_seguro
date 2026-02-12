@@ -30,6 +30,14 @@ const getDeviceId = (): string => {
   return newId;
 };
 
+// --- DICCIONARIO DE AYUDA (V1.0 PROFESIONAL) ---
+const HELP_CONTENT = {
+  vehiculo: "El VIN (Chasis) suele estar grabado en el parabrisas (abajo a la izquierda) o en el parante de la puerta del conductor. Son 17 dígitos.",
+  movilidad: "El número de cuadro suele estar debajo del eje de los pedales o en el poste del manubrio. Limpia la zona para leerlo bien.",
+  tecnologia: "📱 Celulares: Marca *#06# en el teclado para ver el IMEI. 💻 Notebooks: Busca la etiqueta S/N o Serial en la base trasera.",
+  hogar: "Busca una placa metálica o etiqueta adhesiva en la parte trasera o inferior con las siglas S/N o Serial Number."
+};
+
 interface GenerateScreenProps {
   onGenerateComplete: (result: Item) => void;
   user: User;
@@ -38,14 +46,28 @@ interface GenerateScreenProps {
 
 const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, user, onMenuClick }) => {
 
-  // --- ESTADOS (Lógica Original Intacta) ---
+  // --- ESTADOS (Lógica V1.0 PROFESIONAL) ---
+  const [category, setCategory] = useState<'vehiculo' | 'movilidad' | 'tecnologia' | 'hogar' | ''>('');
+  
   const [item, setItem] = useState({
-    tipo: 'Vehiculo',
+    tipo: '',        // Categoría (mapeado para itemService)
+    subtipo: '',     // Ej: Moto, Notebook
     marca: '',
     modelo: '',
-    identificador: '',
+    color: '',
+    patente: '',
+    chassis: '',
+    motor: '',
+    imei: '',
+    serialNumber: '',
+    facturaNro: '',
+    pais: 'AR',
+    identificador: '', // Mantenemos por compatibilidad con saveItem
   });
 
+  const [helpTitle, setHelpTitle] = useState('');
+  const [helpText, setHelpText] = useState('');
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isSelfDevice, setIsSelfDevice] = useState(false);
 
   // --- LÓGICA GPS (OPTIMIZADA) ---
@@ -84,15 +106,30 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
 
   // --- MANEJADORES ---
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setItem({ ...item, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setItem(prev => ({ ...prev, [name]: value }));
   };
 
-  const isFormValid = item.marca.trim() !== '' && item.modelo.trim() !== '' && item.identificador.trim() !== '';
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const cat = e.target.value as any;
+    setCategory(cat);
+    setItem(prev => ({ ...prev, tipo: cat, subtipo: '' })); // Reset subtipo al cambiar categoría
+  };
+
+  const openHelp = (key: keyof typeof HELP_CONTENT, title: string) => {
+    setHelpTitle(title);
+    setHelpText(HELP_CONTENT[key]);
+    setIsHelpModalOpen(true);
+  };
+
+  // VALIDACIÓN LEGAL: categoría, subtipo y al menos UN dato oficial
+  const isFormValid = !!category && !!item.subtipo && !!item.marca && 
+    (!!item.patente || !!item.imei || !!item.serialNumber || !!item.chassis);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isFormValid) {
-      setError("Por favor completa todos los campos.");
+      setError("Faltan datos obligatorios para la certificación legal.");
       return;
     }
     setError('');
@@ -184,24 +221,24 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
         <div className="flex-grow p-4 overflow-y-auto custom-scrollbar z-10 flex flex-col items-center justify-start pb-24 relative">
           <div className="w-full max-w-md space-y-3">
 
-            <form onSubmit={handleSubmit} className={glassCardClass}>
+            <div className={glassCardClass}>
               <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-400/50 to-transparent"></div>
 
-              <div className="space-y-3">
+              <div className="space-y-4">
+                {/* 1. SELECCIÓN DE CATEGORÍA */}
                 <div>
-                  <label className={labelClass}>Tipo de Artículo</label>
+                  <label className={labelClass}>Categoría de Activo</label>
                   <div className="relative">
                     <select
-                      name="tipo"
-                      value={item.tipo}
-                      onChange={handleChange}
-                      className={`${inputClass} appearance-none cursor-pointer text-blue-100 font-medium`}
+                      value={category}
+                      onChange={handleCategoryChange}
+                      className={`${inputClass} appearance-none cursor-pointer text-blue-100 font-bold`}
                     >
-                      <option>Vehiculo</option>
-                      <option>Celular</option>
-                      <option>Notebook</option>
-                      <option>Bicicleta</option>
-                      <option>Otro</option>
+                      <option value="">-- Seleccionar --</option>
+                      <option value="vehiculo">🚗 Vehículo (Auto, Moto...)</option>
+                      <option value="movilidad">🚲 Movilidad (Bici, Monopatín...)</option>
+                      <option value="tecnologia">📱 Tecnología (Celular, PC...)</option>
+                      <option value="hogar">📺 Hogar (Electro, TV...)</option>
                     </select>
                     <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-blue-400">
                       <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
@@ -209,81 +246,162 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelClass}>Marca</label>
-                    <input
-                      type="text"
-                      name="marca"
-                      value={item.marca}
-                      onChange={handleChange}
-                      placeholder="Ej: Samsung"
-                      className={inputClass}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Modelo</label>
-                    <input
-                      type="text"
-                      name="modelo"
-                      value={item.modelo}
-                      onChange={handleChange}
-                      placeholder="Ej: S23"
-                      className={inputClass}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className={labelClass}>
-                    {item.tipo === 'Vehiculo' ? 'Patente' : 'Identificador Único (Serie/IMEI)'}
-                  </label>
-                  <input
-                    type="text"
-                    name="identificador"
-                    value={item.identificador}
-                    onChange={handleChange}
-                    placeholder={item.tipo === 'Vehiculo' ? 'AA 123 BB' : 'XJ9-0022...'}
-                    className={inputClass}
-                  />
-                </div>
-              </div>
-
-              <div className="my-5 border-t border-white/5"></div>
-
-              <div
-                onClick={() => setIsSelfDevice(!isSelfDevice)}
-                className={`
-                  relative rounded-xl p-4 transition-all duration-300 border cursor-pointer group
-                  ${isSelfDevice
-                    ? 'bg-blue-600/20 border-blue-500/60 shadow-[0_0_20px_rgba(37,99,235,0.15)]'
-                    : 'bg-white/5 border-white/5 hover:bg-white/10'}
-                `}
-              >
-                <div className="flex items-start gap-4">
-                  <div className={`
-                    p-2.5 rounded-lg transition-colors
-                    ${isSelfDevice ? 'bg-blue-500 text-white' : 'bg-gray-700/50 text-gray-500'}
-                  `}>
-                    <DeviceIcon />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={`font-bold text-sm ${isSelfDevice ? 'text-blue-200' : 'text-gray-300'}`}>
-                        Este Dispositivo
-                      </span>
-                      <div className={`w-9 h-5 rounded-full relative transition-colors ${isSelfDevice ? 'bg-blue-500' : 'bg-gray-600/50'}`}>
-                        <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all shadow-sm ${isSelfDevice ? 'left-5' : 'left-1'}`}></div>
+                {category && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                    {/* 2. SUBTIPO Y MARCA */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelClass}>Tipo Específico</label>
+                        <input
+                          type="text"
+                          name="subtipo"
+                          value={item.subtipo}
+                          onChange={handleChange}
+                          placeholder="Ej: Moto, Monopatín"
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Marca</label>
+                        <input
+                          type="text"
+                          name="marca"
+                          value={item.marca}
+                          onChange={handleChange}
+                          placeholder="Ej: Honda, Apple"
+                          className={inputClass}
+                        />
                       </div>
                     </div>
-                    <p className="text-[11px] text-gray-400 leading-tight">
-                      Actívalo <b>solo</b> si estás usando el dispositivo a registrar. Habilita el rastreo "Vigía".
-                    </p>
-                  </div>
-                </div>
-              </div>
 
-            </form>
+                    {/* 3. MODELO Y COLOR */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelClass}>Modelo</label>
+                        <input
+                          type="text"
+                          name="modelo"
+                          value={item.modelo}
+                          onChange={handleChange}
+                          placeholder="Ej: Wave, iPhone 15"
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Color Predominante</label>
+                        <input
+                          type="text"
+                          name="color"
+                          value={item.color}
+                          onChange={handleChange}
+                          placeholder="Ej: Negro Mate"
+                          className={inputClass}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="my-2 border-t border-white/5"></div>
+
+                    {/* 4. CAMPOS LEGALES SEGÚN CATEGORÍA */}
+                    {category === 'vehiculo' && (
+                      <div className="space-y-3">
+                        <div className="flex items-end gap-2">
+                          <div className="flex-1">
+                            <label className={labelClass}>Patente (Dominio)</label>
+                            <input name="patente" value={item.patente} onChange={handleChange} placeholder="Ej: AA123BB" className={inputClass} />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <label className="text-[10px] font-medium text-blue-300/80 uppercase tracking-wider">Nro de Chasis</label>
+                              <button type="button" onClick={() => openHelp('vehiculo', '¿Dónde está el Chasis?')} className="text-blue-400 hover:text-blue-300">ⓘ</button>
+                            </div>
+                            <input name="chassis" value={item.chassis} onChange={handleChange} placeholder="17 dígitos..." className={inputClass} />
+                          </div>
+                        </div>
+                        <div>
+                          <label className={labelClass}>Nro de Motor (Opcional)</label>
+                          <input name="motor" value={item.motor} onChange={handleChange} placeholder="Ej: ABC12345" className={inputClass} />
+                        </div>
+                      </div>
+                    )}
+
+                    {category === 'movilidad' && (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <label className={labelClass}>Número de Cuadro / Serie</label>
+                          <button type="button" onClick={() => openHelp('movilidad', '¿Dónde está el Serie?')} className="text-blue-400 hover:text-blue-300">ⓘ</button>
+                        </div>
+                        <input name="chassis" value={item.chassis} onChange={handleChange} placeholder="Grabado en el cuadro..." className={inputClass} />
+                      </div>
+                    )}
+
+                    {category === 'tecnologia' && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <label className="text-[10px] font-medium text-blue-300/80 uppercase tracking-wider">IMEI (Celulares)</label>
+                            <button type="button" onClick={() => openHelp('tecnologia', '¿Cómo ver mi IMEI?')} className="text-blue-400 hover:text-blue-300">ⓘ</button>
+                          </div>
+                          <input name="imei" value={item.imei} onChange={handleChange} placeholder="15 dígitos..." className={inputClass} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <label className="text-[10px] font-medium text-blue-300/80 uppercase tracking-wider">Número de Serie</label>
+                            <button type="button" onClick={() => openHelp('tecnologia', '¿Dónde encontrar Serial?')} className="text-blue-400 hover:text-blue-300">ⓘ</button>
+                          </div>
+                          <input name="serialNumber" value={item.serialNumber} onChange={handleChange} placeholder="S/N: ..." className={inputClass} />
+                        </div>
+                      </div>
+                    )}
+
+                    {category === 'hogar' && (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <label className={labelClass}>Número de Serie</label>
+                          <button type="button" onClick={() => openHelp('hogar', '¿Dónde buscar el Serie?')} className="text-blue-400 hover:text-blue-300">ⓘ</button>
+                        </div>
+                        <input name="serialNumber" value={item.serialNumber} onChange={handleChange} placeholder="Etiqueta trasera..." className={inputClass} />
+                      </div>
+                    )}
+
+                    {/* BANNER LEGAL OBLIGATORIO */}
+                    <div className="mt-4 p-3 bg-red-900/10 border-l-2 border-red-600 rounded-r-lg">
+                      <p className="text-[9px] text-gray-300 uppercase font-black tracking-tighter leading-tight">
+                        <span className="text-red-500">IMPORTANTE:</span> El registro oficial (IMEI, Chasis, Serie, Patente) 
+                        otorga <span className="text-white">AUTENTICIDAD LEGAL</span>. La omisión de estos datos invalida la certificación de propiedad 
+                        ante autoridades.
+                      </p>
+                    </div>
+
+                    {/* MANTENEMOS VIGÍA SÓLO SI APLICA */}
+                    <div
+                      onClick={() => setIsSelfDevice(!isSelfDevice)}
+                      className={`
+                        relative rounded-xl p-3 transition-all duration-300 border cursor-pointer group mt-2
+                        ${isSelfDevice
+                          ? 'bg-blue-600/20 border-blue-500/60 shadow-[0_0_20px_rgba(37,99,235,0.15)]'
+                          : 'bg-white/5 border-white/5 hover:bg-white/10'}
+                      `}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`p-1.5 rounded-lg ${isSelfDevice ? 'bg-blue-500 text-white' : 'bg-gray-700/50 text-gray-500'}`}>
+                          <DeviceIcon />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className={`font-bold text-xs ${isSelfDevice ? 'text-blue-200' : 'text-gray-300'}`}>Activar Vigía</span>
+                            <div className={`w-7 h-4 rounded-full relative transition-colors ${isSelfDevice ? 'bg-blue-500' : 'bg-gray-600/50'}`}>
+                              <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${isSelfDevice ? 'left-3.5' : 'left-0.5'}`}></div>
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-gray-400 leading-tight">Usa este dispositivo como rastreador GPS.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
 
             <div className="space-y-3 pt-1">
 
@@ -341,11 +459,28 @@ const GenerateScreen: React.FC<GenerateScreenProps> = ({ onGenerateComplete, use
         <ConfirmationModal
           isOpen={isConfirmModalOpen}
           title="Confirmar Registro"
-          message={`¿Generar QR para ${item.marca} ${item.modelo}? Se registrará en tu ubicación actual.`}
+          message={`¿Generar QR para ${item.marca} ${item.modelo}? Se registrará en tu ubicación actual con certificación legal.`}
           onConfirm={handleConfirmGenerate}
           onCancel={() => setConfirmModalOpen(false)}
           confirmText="Sí, Crear"
         />
+
+        {/* MODAL DE AYUDA CONTEXTUAL (V1.0 PROFESIONAL) */}
+        {isHelpModalOpen && (
+          <div className="absolute inset-0 z-[3000] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+            <div className="bg-[#111928] border border-blue-500/30 rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 text-center">
+              <div className="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">ℹ️</div>
+              <h3 className="text-xl font-black text-white mb-2 uppercase tracking-wide">{helpTitle}</h3>
+              <p className="text-gray-400 text-sm leading-relaxed mb-6">{helpText}</p>
+              <button 
+                onClick={() => setIsHelpModalOpen(false)}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all uppercase tracking-widest text-xs"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 4. COLUMNA DERECHA (Publicidad PC) */}
