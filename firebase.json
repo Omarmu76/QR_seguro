@@ -1,7 +1,7 @@
 {
   "hosting": [
     {
-      "site": "qrseguro-oficial",
+      "target": "qrseguro-site",
       "public": "dist",
       "ignore": [
         "firebase.json",
