@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "qrseguro-106ba"
+  },
+  "targets": {
+    "qrseguro-106ba": {
+      "hosting": {
+        "qrseguro-site": [
+          "qrseguro-oficial"
+        ]
+      }
+    }
+  }
+}
